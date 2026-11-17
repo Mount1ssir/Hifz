@@ -1,0 +1,29 @@
+name: Flutter checks
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          channel: stable
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - name: Keep domain code independent of Flutter
+        run: |
+          status=0
+          grep -rnE --include='*.dart' "['\"](package:(flutter|flutter_test|material_ui|cupertino_ui)/|dart:ui['\"])" lib/domain || status=$?
+          case "$status" in
+            1) exit 0 ;;
+            0) echo 'Domain code must use pure Dart.'; exit 1 ;;
+            *) exit "$status" ;;
+          esac
+      - run: flutter analyze
+      - run: flutter test
