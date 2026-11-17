@@ -1,94 +1,170 @@
-# Quran Memorization App: Development Roadmap
+# Quran Memorization App Development Roadmap
 
-*Prepared with Claude · 16 November 2026*
+*Prepared with Claude · 16 November 2026 · Checklist updated 17 November 2026*
 
 ## Overview
 
-This is an 11–12 week plan for the Hifz and Muraja’ah app, assuming a solo developer working roughly 10–15 hours a week and shipping Android first. The Google Play testing gate takes fixed calendar time, so it starts early and runs alongside development.
+This Android-first plan assumes one developer working roughly 10–15 hours per week.
+The original 11–12 week estimate is provisional with the Daily Memorization &
+Consolidation Interface in the MVP. Closed testing runs alongside development.
 
-| Phase | Weeks | You end with |
+Check a task after its stated result is verified. Check a phase's completion gate
+only after all required tasks and the gate itself are verified.
+
+| Phase | Target weeks | Deliverable |
 | --- | --- | --- |
-| 0. Foundations | 1 | Running skeleton, CI, decisions written down |
-| 1. Quran data layer | 2–3 | Verified Quran database bundled in the app |
-| 2. Domain algorithms | 3–4 | Tested Hifz planner and revision partitioner |
-| 3. MVP screens | 5–7 | Both modules working end to end |
+| 0. Foundations | 1 | Flutter skeleton, CI, and design decisions |
+| 1. Quran data layer | 2–3 | Verified bundled Quran database |
+| 2. Domain algorithms | 3–4 | Tested Hifz, Muraja’ah, and intraday review schedulers |
+| 3. MVP screens | 5–7 | Hifz, daily consolidation, and Muraja’ah flows |
 | 4. Reminders and polish | 8 | Release candidate |
-| 5. Closed test and launch | 5–11 | Live on Google Play |
-| 6+. Extensions | After v1.0 | Streaks, audio, smart revision, sync, iOS |
+| 5. Closed test and launch | 5–11 | Android v1.0 on Google Play |
+| 6+. Extensions | After v1.0 | Streaks, audio, smarter revision, sync, and iOS |
 
-## Phase 0: Foundations (week 1)
+## Phase 0 — Foundations (week 1)
 
-- Create the repo with the feature-module folder layout (`core/`, `domain/`, `features/`, `app_modules.dart`), strict lints, and GitHub Actions running `flutter analyze` and `flutter test` on every push.
-- Add a CI check that fails if anything in `lib/domain/` imports `package:flutter`. It’s the cheapest way to keep the algorithms pure.
-- Write a one-page decision log covering:
-  - how the Basmalah is stored (it’s a numbered verse only in Al-Fatiha);
-  - quota units (verses, lines, pages);
-  - memorization direction and rest days;
-  - what a missed day does (shift the schedule or redistribute).
-- Treat `Riwayah` as a parameter in the data layer now, even though only Hafs ships. Verse counts and numbering can differ between riwayat, so use `riwayah.totalAyahs` instead of a hardcoded `6236`.
+- [x] Initialize and commit the Android-first Flutter scaffold (`70e59af`).
+- [x] Install Flutter 3.50.0, Dart 3.14.0, and the Android API 36 build toolchain locally.
+- [x] Create `lib/core/`, `lib/domain/`, `lib/features/`, and `lib/app_modules.dart`.
+- [x] Enable strict Dart analyzer settings and Flutter lints.
+- [x] Add a GitHub Actions workflow for formatting, analysis, and tests on pushes and pull requests.
+- [x] Add and locally verify the CI check that rejects Flutter imports in `lib/domain/`.
+- [x] Pass local formatting, static analysis, and the starter-screen smoke test.
+- [x] Build and inspect the Android debug APK.
+- [ ] Record the Phase 0 design decisions in a one-page log.
+  - [ ] Document Basmalah storage and verse numbering for the Hafs dataset.
+  - [ ] Define verse, line, and page quota semantics.
+  - [ ] Define memorization directions and rest days.
+  - [ ] Decide whether a missed memorization day shifts or redistributes the syllabus.
+- [ ] Record that the data layer accepts a `Riwayah` parameter and reads verse counts from `riwayah.totalAyahs`.
+- [ ] Launch the starter app on a physical Android phone.
+- [ ] Confirm the GitHub Actions workflow passes on a pushed commit.
+- [ ] **Phase complete** — The starter app runs on a phone, hosted CI is green, and the design decisions are recorded.
 
-**Done when:** a blank app runs on your phone and CI is green.
+## Phase 1 — Quran data layer (weeks 2–3)
 
-## Phase 1: Quran data layer (weeks 2–3)
+- [ ] Write a repeatable Tanzil text and metadata import script that generates `quran.db`.
+  - [ ] Preserve the imported Quran text byte-for-byte and include Tanzil attribution.
+  - [ ] Add a checksum test for the imported text.
+- [ ] Bundle and open `quran.db` read-only.
+- [ ] Set up Drift-managed `user.db` for progress, with ayah IDs as references to Quran text.
+- [ ] Parameterize Quran data access by `Riwayah`, ship Hafs first, and use `riwayah.totalAyahs` for dataset bounds.
+- [ ] Add the Hafs mushaf data needed for line and page quotas.
+  - [ ] Verify the licenses for the QUL layout and word-level script before bundling.
+  - [ ] Join the 604-page, 15-line layout's word ranges against the word-level script to compute verse line spans.
+- [ ] Add and pass dataset invariant tests.
+  - [ ] Verify 114 surahs and 6,236 verses for the selected Hafs dataset.
+  - [ ] Match per-surah verse counts against a reference table.
+  - [ ] Verify page order and coverage from 1 through 604.
+  - [ ] Match juz boundaries against reference metadata.
+- [ ] Set a database open-time target and measure it on a low-end Android phone.
+- [ ] **Phase complete** — All data invariants pass and the bundled database meets the open-time target.
 
-- Write a one-off import script (Tanzil text and metadata) that outputs a pre-seeded SQLite file. Keep the text byte-identical to the source, since Tanzil’s terms require it unmodified plus attribution. Add a checksum test so it can’t change by accident.
-- Use two databases: a read-only bundled `quran.db`, and a Drift-managed `user.db` for progress. Progress points to verses by ayah ID only, so you can ship corrected Quran data without migrating user data.
-- For line-based quotas you need line data. QUL (Tarteel’s Quranic Universal Library) offers 604-page, 15-line Hafs mushaf layouts as downloadable SQLite or JSON, and each line record carries first and last word IDs. Join that with a word-level script package to derive how many lines each verse takes. Check each resource’s license before bundling it.
-- Add sanity tests: 114 surahs, 6,236 verses, per-surah counts matching a reference table, pages running 1–604 in order, juz boundaries lining up.
+## Phase 2 — Domain algorithms (weeks 3–4)
 
-**Done when:** the invariant tests pass and the database opens fast on a low-end phone.
+Implement the algorithms in pure Dart and write their tests before implementation.
 
-## Phase 2: Domain algorithms (weeks 3–4)
+- [ ] Implement and test `RangeSet` operations for merge, subtract, complement, and length over ayah ID ranges.
+- [ ] Implement and test `HifzPlanner` behind a strategy interface.
+  - [ ] Derive remaining ayahs from the complement of the baseline, including non-contiguous baselines.
+  - [ ] Support forward, backward, and custom order.
+  - [ ] Fill line and page quotas greedily while keeping verses whole.
+  - [ ] Cover empty and fully memorized baselines, oversized quotas, and a short final session.
+- [ ] Implement and test `RevisionPartitioner`.
+  - [ ] Weight ayahs by words or lines and place cuts near each multiple of total weight divided by the number of days.
+  - [ ] Check chunk weight against the heaviest-verse tolerance and verify complete, non-overlapping coverage of memorized ayahs.
+  - [ ] Cover one revision day and more revision days than ayahs.
+- [ ] Implement an intraday SRS scheduler for the ayahs assigned by `HifzPlanner`.
+  - [ ] Select and document an empirically supported scheduling approach, such as a forgetting-curve model, Leitner-style progression, or an adaptation of SM-2. Record the evidence for the approach, any assumptions in adapting it to same-day Quran recall, and how the adaptation will be validated.
+  - [ ] Generate review due times from the daily assignment and recall outcomes. Define when weaker recall brings the next review forward and when stronger recall allows a longer interval.
+  - [ ] Support learner-defined repetitions per day and intervals between repetitions. Define how settings override or constrain the adaptive schedule and how invalid settings are handled.
+  - [ ] Define behavior for late or missed reviews, setting changes, day rollover, and time-zone changes. Preserve completed attempts and avoid duplicate due reviews.
+  - [ ] Test default and customized schedules with a controllable clock, including weak and strong recall, interval changes, and day rollover.
+- [ ] Measure at least 90% test coverage for `lib/domain/`.
+- [ ] Have someone with Quran memorization experience review sample Hifz, Muraja’ah, and intraday schedules.
+- [ ] **Phase complete** — Domain tests pass, coverage meets the target, and sample schedules have been reviewed.
 
-Pure Dart, tests first.
+## Phase 3 — MVP screens (weeks 5–7)
 
-- Build `RangeSet` first, with merge, subtract, complement, and length over ayah ID ranges. Both modules sit on it.
-- Build `HifzPlanner` behind a strategy interface.
-  - Remaining text is the complement of the baseline, so non-contiguous baselines work (a single “next ayah” pointer only handles one contiguous run).
-  - Support forward, backward, and custom order.
-  - For line or page quotas, fill greedily and never split a verse.
-- Build `RevisionPartitioner`: weight each verse (words or lines) and cut where the running total first reaches k × total ÷ N. Each chunk stays within the heaviest verse’s weight of total ÷ N.
-- Test these edge cases: empty baseline, whole Quran memorized, quota larger than what’s left, more days than verses, one day, short last session. Also check that the chunks’ union equals the memorized set with no overlaps.
+### Week 5 — Onboarding and Hifz
 
-**Done when:** `domain/` has 90%+ coverage, and someone who has memorized portions has sanity-checked a few generated plans.
+- [ ] Build onboarding with a surah checklist, partial-surah ayah ranges, daily quota, and a live projected finish date.
+- [ ] Build the Hifz screen with a syllabus and a Today card that opens the daily assignment.
+- [ ] Submit the Hifz-only build to closed testing at the end of week 5, subject to Play Console readiness.
 
-## Phase 3: MVP screens (weeks 5–7)
+### Week 6 — Daily Memorization & Consolidation Interface and Muraja’ah
 
-- **Week 5:** onboarding (surah checklist plus partial-surah ayah range, daily quota, a live “you’ll finish on \[date\]” preview), then the Hifz screen with the syllabus and a Today card. Push a Hifz-only build to closed testing at the end of the week.
-- **Week 6:** the Muraja’ah screen (pick days, preview the partition, today’s portion, mark done) and a minimal reader showing the session’s text in the KFGQPC Hafs font.
-- **Week 7:** settings, edit-baseline-and-recompute, Arabic and English localization (ARB files), RTL checks, dark mode, and large-font support.
-- Persist inputs and completion logs, not generated plans. A plan is a pure function of its inputs, so it never goes stale when you improve the algorithm.
+The Daily Memorization & Consolidation Interface shall use Spaced Repetition
+Systems (SRS) and Active Recall to counter forgetting and support long-term
+retention and memory consolidation. It shall schedule intraday reviews of the
+daily assigned curriculum using the evidence-based scheduler from Phase 2.
+Learners shall be able to adjust repetition frequency and time intervals for
+their own cognitive load and recall performance.
 
-**Done when:** you’ve used it for your own daily hifz for a full week.
+- [ ] Build the dedicated interface and open it from the Hifz Today card.
+  - [ ] Show the assigned ayah ranges and the schedule of due, upcoming, and completed reviews.
+  - [ ] Prompt the learner to recite from memory with the assigned text hidden, then reveal the text for comparison and collect a recall rating.
+  - [ ] Feed the rating into the scheduler and show the updated next review time.
+  - [ ] Let the learner set the daily repetition count and intervals, preview the resulting schedule, and save or reset the settings.
+  - [ ] Verify that the interface reflects the default schedule, a customized schedule, and a schedule updated after a weak recall attempt.
+- [ ] Build the Muraja’ah screen with revision-day selection, a partition preview, today's portion, and a completion action.
+- [ ] Build a minimal reader for session text using the KFGQPC Hafs font.
 
-## Phase 4: Reminders and polish (week 8)
+### Week 7 — Settings, persistence, and accessibility
 
-- Add daily reminders with `flutter_local_notifications`. Android 13+ requires a runtime notification permission, and Android 14+ doesn’t grant the exact-alarm permission by default, so ask for the first at a sensible moment and schedule reminders as inexact. Also declare the boot permission so alarms survive reboots.
-- Write one `integration_test` for the happy path: onboard, see the plan, complete a session.
-- Use crash reporting only (Crashlytics or Sentry’s free tier) and no analytics in v1, so the privacy policy can say progress never leaves the device.
-- Add an attributions screen: text source, font, QUL data, open-source licenses.
-- Test on small screens, an older Android version, and large font scales.
+- [ ] Add settings and let learners edit their baseline and recompute their plan.
+- [ ] Persist planning inputs, review settings, recall attempts, and completion logs. Derive schedules from those inputs and logs.
+- [ ] Verify after restarting the app that settings, attempts, completed reviews, and the next due review are restored.
+- [ ] Localize the MVP in Arabic and English using ARB files and verify RTL layout.
+- [ ] Verify dark mode and large font scales.
+- [ ] **Phase complete** — Use Hifz, active recall, and intraday reviews for one week and verify that Muraja’ah works from schedule setup through completion.
 
-**Done when:** you’ve tagged a release candidate.
+## Phase 4 — Reminders and polish (week 8)
 
-## Phase 5: Closed test and launch (weeks 5–11)
+- [ ] Add daily Hifz reminders and reminders for upcoming intraday reviews with `flutter_local_notifications`.
+  - [ ] Request notification permission where required, schedule inexact reminders, and restore pending reminders after reboot.
+  - [ ] Verify that settings or due-time changes replace obsolete reminders and that completing a review cancels its pending reminder.
+- [ ] Add an `integration_test` that onboards a learner, opens the assigned portion, completes an active recall review, and shows the next review time.
+- [ ] Configure Crashlytics or Sentry for crash reporting and verify that analytics are disabled and Quran progress stays on-device.
+- [ ] Add attributions for Quran text, font, QUL data, and open-source licenses.
+- [ ] Test a small screen, an older supported Android version, and large font scales.
+- [ ] Compare delayed unaided recall under the proposed default schedule with a baseline schedule in a pilot. Document the interval settings, recall measure, results, and limits before making retention claims.
+- [ ] **Phase complete** — Tag a release candidate after verification passes.
 
-- Open the Play Console account in week 4 or 5. The registration fee is a one-time $25, payable by credit or debit card; prepaid cards aren’t accepted. Google is also phasing in Android developer verification, with global enforcement planned for 2027, so check the Play Console home page for your app’s registration status before launch.
-- Know the testing gate: personal accounts created after 13 November 2023 must run a closed test with at least 12 testers opted in continuously for 14 days before they can publish to production. Older personal accounts and organization accounts are exempt, though an organization account needs a D-U-N-S number, which can take up to 30 days to obtain.
-- Recruit more than 12 (aim for about 20), because most failed attempts come from testers dropping out, and testers have to actually use the app, not just install it. Ask them to follow a daily plan for the two weeks. Hifz circles, teachers, and friends are a natural pool.
-- Internal testing (up to 100 testers, no review) is useful for your own iteration but doesn’t count toward the requirement.
-- After the 14 days, expect roughly two days for Google’s decision on your production application, then up to seven days of review.
-- Draft the privacy policy (GitHub Pages hosts it free), data-safety answers, and Arabic and English screenshots early. You’ll need them before production at the latest.
+## Phase 5 — Closed test and launch (weeks 5–11)
 
-**Done when:** v1.0 is live. Android total cost: $25.
+- [ ] Open the Play Console account in week 4 or 5 and confirm the current fee, payment options, and developer verification requirements.
+- [ ] Confirm the account-specific production testing requirements. Use 12 continuous opt-ins for 14 days as the planning target if that gate applies.
+- [ ] Recruit around 20 testers through Hifz circles, teachers, and friends. Ask them to follow a daily plan during the closed test.
+- [ ] Run an internal test for early feedback if needed.
+- [ ] Run the closed test and verify that the applicable opt-in and testing requirements are met.
+- [ ] Prepare the Play Store materials.
+  - [ ] Publish the privacy policy and complete the data-safety answers.
+  - [ ] Capture Arabic and English screenshots.
+  - [ ] Assign a permanent Android application ID and configure release signing.
+- [ ] Apply for production access if required, then submit the release for review.
+- [ ] **Phase complete** — Verify that Android v1.0 is live on Google Play.
 
-## Phase 6+: After v1.0
+## Phase 6+ — After v1.0
 
-- **v1.1, habit loop:** build the module registry and event bus first (the third feature is the trigger for introducing them), then streaks, stats, and missed-day catch-up.
-- **v1.2, listening:** `just_audio`, verse repeat and loop, reciter downloads. QUL offers recitation audio with ayah-level timestamp data, which supports looping and highlighting. Check each reciter’s license.
-- **v1.3, smarter revision:** Sabaq/Sabqi/Manzil tiers (new lesson, recent revision, older portions), self-rated strength per portion, spaced repetition, and a hide-the-text self-test mode. This needs the completion history from v1.1.
-- **v2.0, backup and sync:** JSON export/import first, then accounts and cloud sync behind the repository interfaces, once people ask for multi-device.
-- **v2.x, reach:** iOS (Apple’s developer program is $99 a year, and builds need macOS), more riwayat, home-screen widgets, and teacher/student mode.
+- [ ] **v1.1 — Habit loop**
+  - [ ] Add the module registry and event bus when introducing the third standalone feature module.
+  - [ ] Add streaks, statistics, and missed-day catch-up.
+- [ ] **v1.2 — Listening**
+  - [ ] Verify reciter and QUL audio licenses before bundling or offering downloads.
+  - [ ] Add playback, ayah-level looping and highlighting, and reciter downloads with `just_audio`.
+- [ ] **v1.3 — Smarter Muraja’ah**
+  - [ ] Add Sabaq, Sabqi, and Manzil tiers using the completion history from v1.1.
+  - [ ] Add self-rated strength and multi-day SRS for previously memorized portions.
+  - [ ] Reuse the MVP's hidden-text recall flow for Muraja’ah self-tests.
+- [ ] **v2.0 — Backup and sync**
+  - [ ] Add JSON export and import.
+  - [ ] Add accounts and cloud sync behind repository interfaces when multi-device demand is established.
+- [ ] **v2.x — Reach**
+  - [ ] Set up macOS builds and verify Apple Developer Program requirements for iOS.
+  - [ ] Add more riwayat.
+  - [ ] Add home-screen widgets.
+  - [ ] Add teacher and student mode.
 
 ## Sources
 
@@ -102,3 +178,7 @@ Fees, store requirements, and platform behavior change, so re-check these before
 - QUL mushaf layouts and tutorial: https://qul.tarteel.ai/mushaf\_layouts and https://qul.tarteel.ai/docs/tutorial-mushaf-layout-end-to-end
 - QUL recitation resources: https://qul.tarteel.ai/resources
 - Android notification permissions and exact alarms in Flutter: https://dev.to/mxomasuku/build-reliable-local-notifications-in-flutter-step-by-step-3l1f and https://github.com/MaikuB/flutter\_local\_notifications/issues/1906
+
+- Original research on the relationship between review spacing and delayed retention. [Cepeda et al., 2008](https://pubmed.ncbi.nlm.nih.gov/19076480/)
+- Original research on the effect of retrieval practice on later retention. [Karpicke and Roediger, 2007](https://learninglab.psych.purdue.edu/downloads/2007/2007_Karpicke_Roediger_JML.pdf)
+- Background on the original SM-2 algorithm and its design. [SuperMemo](https://www.supermemo.com/en/blog/the-true-history-of-spaced-repetition)
