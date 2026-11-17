@@ -1,25 +1,21 @@
 # Quran Memorization App Development Roadmap
 
-*Prepared with Claude · 16 November 2026 · Checklist updated 17 November 2026*
+_16 November 2026 · Checklist updated 17 November 2026_
 
 ## Overview
-
-This Android-first plan assumes one developer working roughly 10–15 hours per week.
-The original 11–12 week estimate is provisional with the Daily Memorization &
-Consolidation Interface in the MVP. Closed testing runs alongside development.
 
 Check a task after its stated result is verified. Check a phase's completion gate
 only after all required tasks and the gate itself are verified.
 
-| Phase | Target weeks | Deliverable |
-| --- | --- | --- |
-| 0. Foundations | 1 | Flutter skeleton, CI, and design decisions |
-| 1. Quran data layer | 2–3 | Verified bundled Quran database |
-| 2. Domain algorithms | 3–4 | Tested Hifz, Muraja’ah, and intraday review schedulers |
-| 3. MVP screens | 5–7 | Hifz, daily consolidation, and Muraja’ah flows |
-| 4. Reminders and polish | 8 | Release candidate |
-| 5. Closed test and launch | 5–11 | Android v1.0 on Google Play |
-| 6+. Extensions | After v1.0 | Streaks, audio, smarter revision, sync, and iOS |
+| Phase                     | Target weeks | Deliverable                                            |
+| ------------------------- | ------------ | ------------------------------------------------------ |
+| 0. Foundations            | 1            | Flutter skeleton, CI, and design decisions             |
+| 1. Quran data layer       | 2–3          | Verified bundled Quran database                        |
+| 2. Domain algorithms      | 3–4          | Tested Hifz, Muraja’ah, and intraday review schedulers |
+| 3. MVP screens            | 5–7          | Hifz, daily consolidation, and Muraja’ah flows         |
+| 4. Reminders and polish   | 8            | Release candidate                                      |
+| 5. Closed test and launch | 5–11         | Android v1.0 on Google Play                            |
+| 6+. Extensions            | After v1.0   | Streaks, audio, smarter revision, sync, and iOS        |
 
 ## Phase 0 — Foundations (week 1)
 
@@ -31,13 +27,13 @@ only after all required tasks and the gate itself are verified.
 - [x] Add and locally verify the CI check that rejects Flutter imports in `lib/domain/`.
 - [x] Pass local formatting, static analysis, and the starter-screen smoke test.
 - [x] Build and inspect the Android debug APK.
-- [ ] Record the Phase 0 design decisions in a one-page log.
-  - [ ] Document Basmalah storage and verse numbering for the Hafs dataset.
-  - [ ] Define verse, line, and page quota semantics.
-  - [ ] Define memorization directions and rest days.
-  - [ ] Decide whether a missed memorization day shifts or redistributes the syllabus.
-- [ ] Record that the data layer accepts a `Riwayah` parameter and reads verse counts from `riwayah.totalAyahs`.
-- [ ] Launch the starter app on a physical Android phone.
+- [x] Record the Phase 0 design decisions in a [one-page log](docs/phase-0-decisions.md).
+  - [x] Document Basmalah storage and verse numbering for the Hafs dataset.
+  - [x] Define verse, line, and page quota semantics.
+  - [x] Define memorization directions and rest days.
+  - [x] Decide whether a missed memorization day shifts or redistributes the syllabus.
+- [x] Record that the data layer accepts a `Riwayah` parameter and reads verse counts from `riwayah.totalAyahs`.
+- [x] Launch the starter app on a physical Android phone.
 - [ ] Confirm the GitHub Actions workflow passes on a pushed commit.
 - [ ] **Phase complete** — The starter app runs on a phone, hosted CI is green, and the design decisions are recorded.
 
