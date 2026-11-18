@@ -1,0 +1,12 @@
+Quranic Universal Library (QUL), maintained by Tarteel
+https://qul.tarteel.ai
+
+Printed line metadata derived from KFGQPC V1 layout (1405H print), resource 15,
+and QPC V1 Glyphs - Word by Word, resource 57.
+https://qul.tarteel.ai/resources/mushaf-layout/15
+https://qul.tarteel.ai/resources/quran-script/57
+
+The user supplied the source exports and reports on 18 November 2026 that
+QUL's platform and email confirmed their use for this project.
+This records the user's confirmation; the email itself is not stored here.
+Quran text continues to come from Tanzil with its notice preserved separately.

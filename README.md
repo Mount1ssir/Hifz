@@ -101,10 +101,10 @@ ok
 
 ## How Hifz is organized and what its dependencies do
 
-Hifz is a Flutter mobile app written in Dart. It currently opens its local
-databases and shows the starter screen. The memorization and revision algorithms
-are being built in the domain layer. Onboarding, daily plans, and recall screens
-are later roadmap tasks.
+Hifz is a Flutter mobile app written in Dart. It opens its local
+databases and shows a daily memorization portion with Arabic text, a configurable
+ayah quota, saved progress, and hide/reveal controls. The Review tab schedules spaced recall, saves self-ratings, and offers custom
+review intervals. Onboarding and the full syllabus remain roadmap tasks.
 
 ### The architecture
 
@@ -146,13 +146,16 @@ many lines each ayah occupies. The planner can then fill a quota while keeping
 ayahs whole. Our page-quota design uses the selected layout's lines-per-page
 conversion.
 
-The selected QUL layout and word-script licenses are still unresolved, so those
-datasets are awaiting import. Verse-based planning works with the bundled data.
-The weighted planner accepts verified line weights when they become available.
-The planned QUL import happens during development; the app will read the
-resulting bundled data offline.
-[Layout resource](https://qul.tarteel.ai/resources/mushaf-layout/15/licence),
-[word-script resource](https://qul.tarteel.ai/resources/quran-script/57/licence).
+The supplied QUL layout and word files are now imported. The daily quota dialog
+supports ayahs, printed-line workload, and page workload. Line weights count
+the distinct printed lines touched by each ayah; a shared line contributes to
+each touching ayah. A page is 15 line units, and portions keep ayahs whole.
+The import runs during development, and the app reads the bundled results
+offline. QUL source archives and hashes are retained for reproducibility.
+The user reports that QUL’s platform and email confirmed use of its developer
+resources. This confirmation is recorded in the project notes.
+[Layout resource](https://qul.tarteel.ai/resources/mushaf-layout/15),
+[word-script resource](https://qul.tarteel.ai/resources/quran-script/57).
 
 ### Installed packages
 

@@ -26,4 +26,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/data/
+    - assets/data/quran.db
+    - assets/data/quran.db.sha256
+    - assets/data/TANZIL-NOTICE.txt
+    - assets/data/QUL-SOURCES.txt

@@ -20,11 +20,28 @@ Progress keys include riwayah, numbering identity, and ayah ID. Updating Quran
 text therefore leaves progress intact. Regenerate Drift code after schema
 edits with `dart run build_runner build`.
 
-The selected QUL V1 layout and matching word script both report unavailable
-copyright information. Their license verification and line-span import remain
-pending. Line weights are unavailable until that data is cleared and imported.
-[Layout license](https://qul.tarteel.ai/resources/mushaf-layout/15/licence),
-[word-script license](https://qul.tarteel.ai/resources/quran-script/57/licence).
+The supplied QUL archives are pinned in `data/sources/` with SHA-256 hashes.
+The importer joins 83,668 word IDs to the V1 printed line ranges and stores
+13,766 distinct `(ayah_id, page, line)` records in `ayah_lines`. It rejects missing
+words, duplicate assignments, invalid line coordinates, and incomplete coverage.
+The bundle covers all 6,236 ayahs and 604 printed pages. QUL glyph text is used
+only to identify word records; the rendered text remains the original Tanzil text.
+
+The planner counts distinct printed lines touched by each ayah. Shared lines
+count for each touching ayah, matching the Phase 0 workload decision. A page
+quota uses 15 line units. Portions stop after reaching the requested workload,
+keeping the final ayah whole. These values measure approximate reading workload.
+The app's quota dialog offers ayahs, lines, and pages and saves both the amount
+and unit atomically. Existing settings retain their ayah unit.
+
+Only the generated database, checksum, and attribution files are Flutter assets.
+The original uploaded archives remain in `assets/data/`, while reproducible
+imports use the pinned copies in `data/sources/`.
+On 18 November 2026 the user reported that QUL’s platform and email confirmed
+use of these developer resources. The confirmation is user-reported; the email
+is not archived in this repository.
+[Layout source](https://qul.tarteel.ai/resources/mushaf-layout/15),
+[word source](https://qul.tarteel.ai/resources/quran-script/57).
 
 The initial performance target is at most 500 ms for a warm database open and
 2 seconds for first installation on a low-end Android phone. Startup logs
@@ -49,6 +66,5 @@ These are debug-build results. First-install timing requires a separate fresh
 installation measurement, and the recorded model must be assessed against the
 low-end device target.
 
-The [licensing question](qul-license-request.md) is ready to submit to QUL.
-Record their response and applicable terms before marking the licensing item
-complete.
+The user reports receiving usage confirmation from QUL. The earlier
+[licensing question](qul-license-request.md) is retained as background.

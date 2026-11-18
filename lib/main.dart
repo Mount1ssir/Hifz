@@ -3,8 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'app_modules.dart';
-import 'core/data/app_databases.dart';
-import 'domain/riwayah.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,7 +11,10 @@ Future<void> main() async {
       'Tanzil Quran text — https://tanzil.net',
     ], await rootBundle.loadString('assets/data/TANZIL-NOTICE.txt'));
   });
-  final databases = await AppDatabases.open(riwayah: Riwayah.hafs);
-  debugPrint('Hifz database open: ${databases.openTime.inMilliseconds} ms');
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks([
+      'QUL — Quranic Universal Library',
+    ], await rootBundle.loadString('assets/data/QUL-SOURCES.txt'));
+  });
   runApp(const HifzApp());
 }

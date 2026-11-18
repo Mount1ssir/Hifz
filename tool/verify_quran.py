@@ -2,6 +2,8 @@
 import hashlib
 import json
 import sqlite3
+import zipfile
+import tempfile
 import xml.etree.ElementTree as ET
 
 from import_quran import ROOT, SOURCES, OUTPUT
@@ -36,5 +38,28 @@ try:
     raise AssertionError("Quran database allowed a write")
 except sqlite3.OperationalError:
     pass
+with zipfile.ZipFile(SOURCES / "qpc-v1-glyph-codes-wbw.json.zip") as archive:
+    words = json.loads(archive.read("qpc-v1-glyph-codes-wbw.json"))
+word_ids = {int(word["id"]): (int(word["surah"]), int(word["ayah"]))
+            for word in words.values()}
+ayah_ids = {(s, n): i for i, s, n in db.execute("SELECT id, surah, number FROM ayahs")}
+expected_spans = set()
+with tempfile.TemporaryDirectory() as directory:
+    from pathlib import Path
+    layout_path = Path(directory) / "layout.db"
+    with zipfile.ZipFile(SOURCES / "qpc-v1-15-lines.db.zip") as archive:
+        layout_path.write_bytes(archive.read("qpc-v1-15-lines.db"))
+    with sqlite3.connect(layout_path) as layout:
+        for page, line, first, last in layout.execute(
+            "SELECT page_number, line_number, first_word_id, last_word_id FROM pages WHERE line_type='ayah'"
+        ):
+            for word in range(first, last + 1):
+                expected_spans.add((ayah_ids[word_ids[word]], page, line))
+actual_spans = set(db.execute("SELECT ayah_id, page, line FROM ayah_lines"))
+assert actual_spans == expected_spans, "QUL line spans differ from source word ranges"
+assert {i for i, _, _ in actual_spans} == set(range(1, 6237))
+assert {page for _, page, _ in actual_spans} == set(range(1, 605))
+assert all(1 <= line <= 15 for _, _, line in actual_spans)
+print(f"PASS: {len(actual_spans)} exact QUL ayah-line spans across 604 pages.")
 db.close()
 print("PASS: checksums, exact text bytes, 114 surahs, 6236 ayahs, 604 pages, 30 juz, and read-only access.")

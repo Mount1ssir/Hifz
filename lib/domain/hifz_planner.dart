@@ -1,6 +1,8 @@
 import 'range_set.dart';
 import 'riwayah.dart';
 
+enum QuotaUnit { ayahs, lines, pages }
+
 abstract interface class MemorizationOrder {
   List<int> arrange(RangeSet remaining);
 }

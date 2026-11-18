@@ -73,5 +73,25 @@ class QuranRepository {
         .toList();
   }
 
+  int get linesPerPage => int.parse(
+    _db
+            .select("SELECT value FROM metadata WHERE key = 'lines_per_page'")
+            .single['value']
+        as String,
+  );
+
+  Map<int, int> lineWeights() {
+    final weights = {
+      for (final row in _db.select(
+        'SELECT ayah_id, COUNT(*) AS weight FROM ayah_lines GROUP BY ayah_id',
+      ))
+        row['ayah_id'] as int: row['weight'] as int,
+    };
+    if (weights.length != riwayah.totalAyahs) {
+      throw StateError('Incomplete printed-line metadata.');
+    }
+    return Map.unmodifiable(weights);
+  }
+
   void close() => _db.close();
 }

@@ -7,6 +7,8 @@ import sqlite3
 import tempfile
 import xml.etree.ElementTree as ET
 
+from import_layout import import_layout
+
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / "data/sources"
 OUTPUT = ROOT / "assets/data"
@@ -73,11 +75,13 @@ def build():
                 ))
             if len(records) != 6236:
                 raise ValueError("Incomplete Hafs text")
-            db.execute("PRAGMA user_version = 1")
+            word_count, span_count = import_layout(db, SOURCES)
+            db.execute("PRAGMA user_version = 2")
         temp_path.replace(OUTPUT / "quran.db")
     finally:
         temp_path.unlink(missing_ok=True)
     (OUTPUT / "TANZIL-NOTICE.txt").write_text(notice + "\n")
+    print(f"Imported {word_count} QUL words and {span_count} ayah-line spans.")
     digest = hashlib.sha256((OUTPUT / "quran.db").read_bytes()).hexdigest()
     (OUTPUT / "quran.db.sha256").write_text(digest + "\n")
 

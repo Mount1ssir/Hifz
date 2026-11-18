@@ -45,12 +45,12 @@ only after all required tasks and the gate itself are verified.
 - [x] Bundle and open `quran.db` read-only.
 - [x] Set up Drift-managed `user.db` for progress, with ayah IDs as references to Quran text.
 - [x] Parameterize Quran data access by `Riwayah`, ship Hafs first, and use `riwayah.totalAyahs` for dataset bounds.
-- [ ] Add the Hafs mushaf data needed for line and page quotas.
+- [x] Add the Hafs mushaf data needed for line and page quotas.
   - [x] Import Tanzil page boundaries.
-  - [x] Inspect the QUL V1 layout and matching word-script license pages. Both report unavailable copyright information, so clearance and import remain pending.
+  - [x] Inspect the QUL V1 layout and matching word-script license pages. The pages lacked copyright information; the user subsequently supplied usage confirmation from QUL.
   - [x] Prepare a [licensing question for QUL](docs/qul-license-request.md).
-  - [ ] Verify the licenses for the QUL layout and word-level script before bundling.
-  - [ ] Join the 604-page, 15-line layout's word ranges against the word-level script to compute verse line spans.
+  - [x] Record the user’s confirmation on 18 November 2026 that QUL’s platform and email permit use of these developer resources.
+  - [x] Join the 604-page, 15-line layout's word ranges against the word-level script to compute verse line spans.
 - [x] Add and pass dataset invariant tests.
   - [x] Verify 114 surahs and 6,236 verses for the selected Hafs dataset.
   - [x] Match per-surah verse counts against a reference table.
@@ -64,7 +64,7 @@ only after all required tasks and the gate itself are verified.
 
 Phone startup has been confirmed by the user. Performance is assumed sufficient
 for continued development at the user’s request; measured timing remains pending.
-QUL licensing and layout import remain open while independent work proceeds.
+QUL layout import is complete. The user has reported usage confirmation from QUL.
 
 ## Phase 2 — Domain algorithms (weeks 3–4)
 
@@ -74,19 +74,19 @@ Implement the algorithms in pure Dart and write their tests before implementatio
 - [x] Implement and test `HifzPlanner` behind a strategy interface.
   - [x] Derive remaining ayahs from the complement of the baseline, including non-contiguous baselines.
   - [x] Support forward, backward, and custom order.
-  - [x] Fill line and page quotas greedily while keeping verses whole. Verified with synthetic weights; real layout weights await the QUL import.
+  - [x] Fill line and page quotas greedily while keeping verses whole. Connected to imported QUL V1 weights through persisted ayah, line, and page quota choices.
   - [x] Cover empty and fully memorized baselines, oversized quotas, and a short final session.
 - [x] Implement and test `RevisionPartitioner`.
   - [x] Weight ayahs by words or lines and place cuts near each multiple of total weight divided by the number of days.
   - [x] Check chunk weight against the heaviest-verse tolerance and verify complete, non-overlapping coverage of memorized ayahs.
   - [x] Cover one revision day and more revision days than ayahs.
-- [ ] Implement an intraday SRS scheduler for the ayahs assigned by `HifzPlanner`.
-  - [ ] Select and document an empirically supported scheduling approach, such as a forgetting-curve model, Leitner-style progression, or an adaptation of SM-2. Record the evidence for the approach, any assumptions in adapting it to same-day Quran recall, and how the adaptation will be validated.
-  - [ ] Generate review due times from the daily assignment and recall outcomes. Define when weaker recall brings the next review forward and when stronger recall allows a longer interval.
-  - [ ] Support learner-defined repetitions per day and intervals between repetitions. Define how settings override or constrain the adaptive schedule and how invalid settings are handled.
-  - [ ] Define behavior for late or missed reviews, setting changes, day rollover, and time-zone changes. Preserve completed attempts and avoid duplicate due reviews.
-  - [ ] Test default and customized schedules with a controllable clock, including weak and strong recall, interval changes, and day rollover.
-- [ ] Measure at least 90% test coverage for `lib/domain/` after the SRS scheduler is implemented. Current range and planning implementation has 99.1% line coverage (108/109).
+- [x] Implement an intraday SRS scheduler for the ayahs assigned by `HifzPlanner`.
+  - [x] Document the [intraday adaptation and its validation limits](docs/review-scheduling.md). Select an empirically supported scheduling approach, such as a forgetting-curve model, Leitner-style progression, or an adaptation of SM-2. Record the evidence for the approach, any assumptions in adapting it to same-day Quran recall, and how the adaptation will be validated.
+  - [x] Generate review due times from the daily assignment and recall outcomes. Define when weaker recall brings the next review forward and when stronger recall allows a longer interval.
+  - [x] Support learner-defined repetitions per day and intervals between repetitions. Define how settings override or constrain the adaptive schedule and how invalid settings are handled.
+  - [x] Define behavior for late or missed reviews, setting changes, day rollover, and time-zone changes. Preserve completed attempts and avoid duplicate due reviews.
+  - [x] Test default and customized schedules with a controllable clock, including weak and strong recall, interval changes, and day rollover.
+- [ ] Measure at least 90% test coverage for `lib/domain/` after the SRS scheduler is implemented. Earlier range and planning coverage was 99.1%; full coverage including the scheduler remains to be measured.
 - [ ] Have someone with Quran memorization experience review sample Hifz, Muraja’ah, and intraday schedules.
 - [ ] **Phase complete** — Domain tests pass, coverage meets the target, and sample schedules have been reviewed.
 
@@ -96,6 +96,9 @@ Implement the algorithms in pure Dart and write their tests before implementatio
 
 - [ ] Build onboarding with a surah checklist, partial-surah ayah ranges, daily quota, and a live projected finish date.
 - [ ] Build the Hifz screen with a syllabus and a Today card that opens the daily assignment.
+  - [x] Add a working daily portion screen with Arabic text, persisted ayah/line/page quotas, progress, and atomic completion.
+  - [x] Install the update on the connected phone and visually verify the daily portion and Arabic text render.
+  - [ ] Add the full syllabus view.
 - [ ] Submit the Hifz-only build to closed testing at the end of week 5, subject to Play Console readiness.
 
 ### Week 6 — Daily Memorization & Consolidation Interface and Muraja’ah
@@ -108,13 +111,17 @@ Learners shall be able to adjust repetition frequency and time intervals for
 their own cognitive load and recall performance.
 
 - [ ] Build the dedicated interface and open it from the Hifz Today card.
-  - [ ] Show the assigned ayah ranges and the schedule of due, upcoming, and completed reviews.
-  - [ ] Prompt the learner to recite from memory with the assigned text hidden, then reveal the text for comparison and collect a recall rating.
-  - [ ] Feed the rating into the scheduler and show the updated next review time.
+  - [x] Add a Review tab with due sessions, completed attempts, hidden-text recall, ratings, and editable intervals.
+  - [ ] Add a direct Today-card link to its review session.
+  - [x] Show the assigned ayah ranges and the schedule of due, upcoming, and completed reviews.
+  - [x] Prompt the learner to recite from memory with the assigned text hidden, then reveal the text for comparison and collect a recall rating.
+  - [x] Feed the rating into the scheduler and show the updated next review time.
   - [ ] Let the learner set the daily repetition count and intervals, preview the resulting schedule, and save or reset the settings.
   - [ ] Verify that the interface reflects the default schedule, a customized schedule, and a schedule updated after a weak recall attempt.
 - [ ] Build the Muraja’ah screen with revision-day selection, a partition preview, today's portion, and a completion action.
 - [ ] Build a minimal reader for session text using the KFGQPC Hafs font.
+  - [x] Render session text right-to-left with hide/reveal controls using the platform Arabic font.
+  - [ ] Bundle and apply the KFGQPC Hafs font.
 
 ### Week 7 — Settings, persistence, and accessibility
 
