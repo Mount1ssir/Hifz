@@ -34,49 +34,59 @@ only after all required tasks and the gate itself are verified.
   - [x] Decide whether a missed memorization day shifts or redistributes the syllabus.
 - [x] Record that the data layer accepts a `Riwayah` parameter and reads verse counts from `riwayah.totalAyahs`.
 - [x] Launch the starter app on a physical Android phone.
-- [ ] Confirm the GitHub Actions workflow passes on a pushed commit.
-- [ ] **Phase complete** — The starter app runs on a phone, hosted CI is green, and the design decisions are recorded.
+- [x] Confirm the GitHub Actions workflow passes on a pushed commit.
+- [x] **Phase complete** — The starter app runs on a phone, hosted CI is green, and the design decisions are recorded.
 
 ## Phase 1 — Quran data layer (weeks 2–3)
 
-- [ ] Write a repeatable Tanzil text and metadata import script that generates `quran.db`.
-  - [ ] Preserve the imported Quran text byte-for-byte and include Tanzil attribution.
-  - [ ] Add a checksum test for the imported text.
-- [ ] Bundle and open `quran.db` read-only.
-- [ ] Set up Drift-managed `user.db` for progress, with ayah IDs as references to Quran text.
-- [ ] Parameterize Quran data access by `Riwayah`, ship Hafs first, and use `riwayah.totalAyahs` for dataset bounds.
+- [x] Write a repeatable Tanzil text and metadata import script that generates `quran.db`.
+  - [x] Preserve the imported Quran text byte-for-byte and include Tanzil attribution.
+  - [x] Add a checksum test for the imported text.
+- [x] Bundle and open `quran.db` read-only.
+- [x] Set up Drift-managed `user.db` for progress, with ayah IDs as references to Quran text.
+- [x] Parameterize Quran data access by `Riwayah`, ship Hafs first, and use `riwayah.totalAyahs` for dataset bounds.
 - [ ] Add the Hafs mushaf data needed for line and page quotas.
+  - [x] Import Tanzil page boundaries.
+  - [x] Inspect the QUL V1 layout and matching word-script license pages. Both report unavailable copyright information, so clearance and import remain pending.
+  - [x] Prepare a [licensing question for QUL](docs/qul-license-request.md).
   - [ ] Verify the licenses for the QUL layout and word-level script before bundling.
   - [ ] Join the 604-page, 15-line layout's word ranges against the word-level script to compute verse line spans.
-- [ ] Add and pass dataset invariant tests.
-  - [ ] Verify 114 surahs and 6,236 verses for the selected Hafs dataset.
-  - [ ] Match per-surah verse counts against a reference table.
-  - [ ] Verify page order and coverage from 1 through 604.
-  - [ ] Match juz boundaries against reference metadata.
-- [ ] Set a database open-time target and measure it on a low-end Android phone.
+- [x] Add and pass dataset invariant tests.
+  - [x] Verify 114 surahs and 6,236 verses for the selected Hafs dataset.
+  - [x] Match per-surah verse counts against a reference table.
+  - [x] Verify page order and coverage from 1 through 604.
+  - [x] Match juz boundaries against reference metadata.
+- [ ] Measure database opening on a low-end Android phone.
+  - [x] Set targets of 500 ms warm and 2 seconds on first installation, with startup timing instrumentation.
+  - [x] Add a repeatable Android timing tool that preserves app data.
+  - [ ] Connect and authorize the phone, collect timings, and record device details.
 - [ ] **Phase complete** — All data invariants pass and the bundled database meets the open-time target.
+
+Phone startup has been confirmed by the user. Performance is assumed sufficient
+for continued development at the user’s request; measured timing remains pending.
+QUL licensing and layout import remain open while independent work proceeds.
 
 ## Phase 2 — Domain algorithms (weeks 3–4)
 
 Implement the algorithms in pure Dart and write their tests before implementation.
 
-- [ ] Implement and test `RangeSet` operations for merge, subtract, complement, and length over ayah ID ranges.
-- [ ] Implement and test `HifzPlanner` behind a strategy interface.
-  - [ ] Derive remaining ayahs from the complement of the baseline, including non-contiguous baselines.
-  - [ ] Support forward, backward, and custom order.
-  - [ ] Fill line and page quotas greedily while keeping verses whole.
-  - [ ] Cover empty and fully memorized baselines, oversized quotas, and a short final session.
-- [ ] Implement and test `RevisionPartitioner`.
-  - [ ] Weight ayahs by words or lines and place cuts near each multiple of total weight divided by the number of days.
-  - [ ] Check chunk weight against the heaviest-verse tolerance and verify complete, non-overlapping coverage of memorized ayahs.
-  - [ ] Cover one revision day and more revision days than ayahs.
+- [x] Implement and test `RangeSet` operations for merge, subtract, complement, and length over ayah ID ranges.
+- [x] Implement and test `HifzPlanner` behind a strategy interface.
+  - [x] Derive remaining ayahs from the complement of the baseline, including non-contiguous baselines.
+  - [x] Support forward, backward, and custom order.
+  - [x] Fill line and page quotas greedily while keeping verses whole. Verified with synthetic weights; real layout weights await the QUL import.
+  - [x] Cover empty and fully memorized baselines, oversized quotas, and a short final session.
+- [x] Implement and test `RevisionPartitioner`.
+  - [x] Weight ayahs by words or lines and place cuts near each multiple of total weight divided by the number of days.
+  - [x] Check chunk weight against the heaviest-verse tolerance and verify complete, non-overlapping coverage of memorized ayahs.
+  - [x] Cover one revision day and more revision days than ayahs.
 - [ ] Implement an intraday SRS scheduler for the ayahs assigned by `HifzPlanner`.
   - [ ] Select and document an empirically supported scheduling approach, such as a forgetting-curve model, Leitner-style progression, or an adaptation of SM-2. Record the evidence for the approach, any assumptions in adapting it to same-day Quran recall, and how the adaptation will be validated.
   - [ ] Generate review due times from the daily assignment and recall outcomes. Define when weaker recall brings the next review forward and when stronger recall allows a longer interval.
   - [ ] Support learner-defined repetitions per day and intervals between repetitions. Define how settings override or constrain the adaptive schedule and how invalid settings are handled.
   - [ ] Define behavior for late or missed reviews, setting changes, day rollover, and time-zone changes. Preserve completed attempts and avoid duplicate due reviews.
   - [ ] Test default and customized schedules with a controllable clock, including weak and strong recall, interval changes, and day rollover.
-- [ ] Measure at least 90% test coverage for `lib/domain/`.
+- [ ] Measure at least 90% test coverage for `lib/domain/` after the SRS scheduler is implemented. Current range and planning implementation has 99.1% line coverage (108/109).
 - [ ] Have someone with Quran memorization experience review sample Hifz, Muraja’ah, and intraday schedules.
 - [ ] **Phase complete** — Domain tests pass, coverage meets the target, and sample schedules have been reviewed.
 

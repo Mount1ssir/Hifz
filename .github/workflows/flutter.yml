@@ -25,5 +25,6 @@ jobs:
             0) echo 'Domain code must use pure Dart.'; exit 1 ;;
             *) exit "$status" ;;
           esac
+      - run: python3 tool/verify_quran.py
       - run: flutter analyze
       - run: flutter test
