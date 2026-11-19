@@ -104,7 +104,8 @@ ok
 Hifz is a Flutter mobile app written in Dart. It opens its local
 databases and shows a daily memorization portion with Arabic text, a configurable
 ayah quota, saved progress, and hide/reveal controls. The Review tab schedules spaced recall, saves self-ratings, and offers custom
-review intervals. Onboarding and the full syllabus remain roadmap tasks.
+review intervals. The syllabus opens upcoming portions in a shared reader with flowing-text and
+recall-card modes. Onboarding remains a roadmap task.
 
 ### The architecture
 

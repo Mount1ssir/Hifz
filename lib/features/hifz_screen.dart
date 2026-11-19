@@ -5,6 +5,7 @@ import '../core/data/quran_repository.dart';
 import '../domain/hifz_planner.dart';
 import '../domain/range_set.dart';
 import '../domain/riwayah.dart';
+import 'quran_reader.dart';
 
 class HifzScreen extends StatefulWidget {
   const HifzScreen({super.key, required this.databases});
@@ -23,7 +24,7 @@ class _HifzScreenState extends State<HifzScreen> with WidgetsBindingObserver {
   bool _loading = true;
   bool _saving = false;
   bool _completed = false;
-  bool _revealed = true;
+  List<PlannedPortion> _plan = [];
   String? _error;
 
   @override
@@ -103,6 +104,7 @@ class _HifzScreenState extends State<HifzScreen> with WidgetsBindingObserver {
         _unit = unit;
         _memorized = baseline.length;
         _remainingSessions = plan.length;
+        _plan = plan;
         _completed = today.isNotEmpty;
         _ayahs = ayahs;
         _loading = false;
@@ -118,26 +120,75 @@ class _HifzScreenState extends State<HifzScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _complete() async {
-    setState(() => _saving = true);
-    try {
-      await widget.databases.user.completePortion(
-        Riwayah.hafs,
-        _ayahs.map((ayah) => ayah.id),
-        DateTime.now(),
-      );
-      await _load();
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Progress could not be saved. Try again.'),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+  Future<void> _openReader() async {
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => QuranReader(
+          ayahs: _ayahs,
+          title: 'Today’s portion',
+          onComplete: _completed
+              ? null
+              : () => widget.databases.user.completePortion(
+                  Riwayah.hafs,
+                  _ayahs.map((ayah) => ayah.id),
+                  DateTime.now(),
+                ),
+        ),
+      ),
+    );
+    if (mounted) await _load();
+  }
+
+  Future<void> _syllabus() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: const Text('Memorization syllabus')),
+          body: _plan.isEmpty
+              ? const Center(child: Text('All ayahs memorized.'))
+              : ListView.builder(
+                  itemCount: _plan.length,
+                  itemBuilder: (context, index) {
+                    final portion = _plan[index];
+                    final first = widget.databases.quran
+                        .readRange(
+                          portion.ayahs.ranges.first.first,
+                          portion.ayahs.ranges.first.first,
+                        )
+                        .single;
+                    final last = widget.databases.quran
+                        .readRange(
+                          portion.ayahs.ranges.last.last,
+                          portion.ayahs.ranges.last.last,
+                        )
+                        .single;
+                    return ListTile(
+                      leading: CircleAvatar(child: Text('${index + 1}')),
+                      title: Text(
+                        'Surah ${first.surah}:${first.number} – ${last.surah}:${last.number}',
+                      ),
+                      subtitle: Text('${portion.ayahs.length} ayahs'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push<void>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => QuranReader(
+                            title: 'Portion ${index + 1}',
+                            ayahs: [
+                              for (final id in portion.ayahs.ids)
+                                widget.databases.quran.readRange(id, id).single,
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ),
+    );
   }
 
   Future<void> _editQuota() async {
@@ -292,67 +343,33 @@ class _HifzScreenState extends State<HifzScreen> with WidgetsBindingObserver {
                       'You have completed the Quran memorization plan.',
                     )
                   else ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Read & recall',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () =>
-                              setState(() => _revealed = !_revealed),
-                          child: Text(_revealed ? 'Hide text' : 'Reveal text'),
-                        ),
-                      ],
+                    Text(
+                      '${_ayahs.length} ayahs · Surah ${_ayahs.first.surah}:${_ayahs.first.number}'
+                      ' – ${_ayahs.last.surah}:${_ayahs.last.number}',
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    if (!_revealed)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 32),
-                        child: Text(
-                          'Recite today’s portion from memory, then reveal the text to check.',
-                        ),
-                      ),
-                    for (final ayah in _ayahs)
-                      Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                'Surah ${ayah.surah} · Ayah ${ayah.number} · Page ${ayah.page}',
-                                style: Theme.of(context).textTheme.labelMedium,
-                              ),
-                              if (_revealed) ...[
-                                const SizedBox(height: 16),
-                                Text(
-                                  ayah.text,
-                                  textDirection: TextDirection.rtl,
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(
-                                    fontSize: 28,
-                                    height: 2,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     FilledButton.icon(
-                      onPressed: _saving || _completed ? null : _complete,
-                      icon: Icon(_completed ? Icons.check_circle : Icons.check),
+                      onPressed: _saving ? null : _openReader,
+                      icon: const Icon(Icons.menu_book_outlined),
                       label: Text(
-                        _saving
-                            ? 'Saving…'
-                            : _completed
-                            ? 'Saved for today'
-                            : 'Mark portion memorized',
+                        _completed
+                            ? 'Read today’s portion'
+                            : 'Begin memorization',
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _syllabus,
+                      icon: const Icon(Icons.list_alt),
+                      label: const Text('View full syllabus'),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      _ayahs.first.text,
+                      textDirection: TextDirection.rtl,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 30, height: 2),
                     ),
                   ],
                 ],

@@ -95,10 +95,10 @@ Implement the algorithms in pure Dart and write their tests before implementatio
 ### Week 5 — Onboarding and Hifz
 
 - [ ] Build onboarding with a surah checklist, partial-surah ayah ranges, daily quota, and a live projected finish date.
-- [ ] Build the Hifz screen with a syllabus and a Today card that opens the daily assignment.
+- [x] Build the Hifz screen with a syllabus and a Today action that opens the daily assignment.
   - [x] Add a working daily portion screen with Arabic text, persisted ayah/line/page quotas, progress, and atomic completion.
   - [x] Install the update on the connected phone and visually verify the daily portion and Arabic text render.
-  - [ ] Add the full syllabus view.
+  - [x] Add the full syllabus view with upcoming portions opening in the shared reader.
 - [ ] Submit the Hifz-only build to closed testing at the end of week 5, subject to Play Console readiness.
 
 ### Week 6 — Daily Memorization & Consolidation Interface and Muraja’ah
@@ -121,6 +121,7 @@ their own cognitive load and recall performance.
 - [ ] Build the Muraja’ah screen with revision-day selection, a partition preview, today's portion, and a completion action.
 - [ ] Build a minimal reader for session text using the KFGQPC Hafs font.
   - [x] Render session text right-to-left with hide/reveal controls using the platform Arabic font.
+  - [x] Add flowing-text and recall-card modes based on the supplied reference images, with navigation and text sizing.
   - [ ] Bundle and apply the KFGQPC Hafs font.
 
 ### Week 7 — Settings, persistence, and accessibility

@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import '../core/data/app_databases.dart';
 import '../core/data/user_database.dart';
 import '../domain/review_scheduler.dart';
+import 'quran_reader.dart';
 
 class ReviewsScreen extends StatefulWidget {
   const ReviewsScreen({super.key, required this.databases});
@@ -294,11 +295,23 @@ class _ReviewsScreenState extends State<ReviewsScreen>
                         await Navigator.push<void>(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => _RecallScreen(
-                              databases: widget.databases,
-                              session: session,
-                              ordinal: pending.first.ordinal,
-                              ayahIds: ids,
+                            builder: (_) => QuranReader(
+                              title: 'Recall ${pending.first.ordinal + 1}',
+                              ayahs: [
+                                for (final id in ids)
+                                  widget.databases.quran
+                                      .readRange(id, id)
+                                      .single,
+                              ],
+                              initialMode: ReaderMode.cards,
+                              startHidden: true,
+                              onRecall: (rating) =>
+                                  widget.databases.user.recordRecall(
+                                    session.id,
+                                    pending.first.ordinal,
+                                    rating,
+                                    DateTime.now(),
+                                  ),
                             ),
                           ),
                         );
@@ -311,120 +324,6 @@ class _ReviewsScreenState extends State<ReviewsScreen>
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _RecallScreen extends StatefulWidget {
-  const _RecallScreen({
-    required this.databases,
-    required this.session,
-    required this.ordinal,
-    required this.ayahIds,
-  });
-  final AppDatabases databases;
-  final ReviewSession session;
-  final int ordinal;
-  final List<int> ayahIds;
-
-  @override
-  State<_RecallScreen> createState() => _RecallScreenState();
-}
-
-class _RecallScreenState extends State<_RecallScreen> {
-  bool _revealed = false;
-  bool _saving = false;
-  String? _error;
-
-  Future<void> _rate(RecallRating rating) async {
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      await widget.databases.user.recordRecall(
-        widget.session.id,
-        widget.ordinal,
-        rating,
-        DateTime.now(),
-      );
-      if (mounted) Navigator.pop(context);
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-          _error = 'Could not save. Return to the review list to refresh the schedule.';
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ayahs = [
-      for (final id in widget.ayahIds)
-        widget.databases.quran.readRange(id, id).single,
-    ];
-    return Scaffold(
-      appBar: AppBar(title: Text('Recall ${widget.ordinal + 1}')),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          Text(
-            _revealed ? 'Compare your recitation' : 'Recite from memory',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Surah ${ayahs.first.surah}:${ayahs.first.number} to ${ayahs.last.surah}:${ayahs.last.number}',
-          ),
-          const SizedBox(height: 32),
-          if (!_revealed) ...[
-            const Icon(Icons.auto_stories_outlined, size: 56),
-            const SizedBox(height: 24),
-            const Text(
-              'Take your time. When you finish, reveal the text and assess your recall.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            FilledButton(
-              onPressed: () => setState(() => _revealed = true),
-              child: const Text('Reveal and compare'),
-            ),
-          ] else ...[
-            for (final ayah in ayahs)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: Text(
-                  '${ayah.text}  ﴿${ayah.number}﴾',
-                  textDirection: TextDirection.rtl,
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(fontSize: 28, height: 2),
-                ),
-              ),
-            const Divider(),
-            const Text('How well did you recall this portion?'),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final rating in RecallRating.values)
-                  OutlinedButton(
-                    onPressed: _saving ? null : () => _rate(rating),
-                    child: Text(switch (rating) {
-                      RecallRating.again => 'Again · forgot',
-                      RecallRating.hard => 'Hard · needed help',
-                      RecallRating.good => 'Good · recalled',
-                      RecallRating.easy => 'Easy · fluent',
-                    }),
-                  ),
-              ],
-            ),
-            if (_error != null) Text(_error!),
-          ],
-        ],
       ),
     );
   }
