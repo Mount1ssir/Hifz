@@ -10,3 +10,9 @@ The user supplied the source exports and reports on 18 November 2026 that
 QUL's platform and email confirmed their use for this project.
 This records the user's confirmation; the email itself is not stored here.
 Quran text continues to come from Tanzil with its notice preserved separately.
+
+Printed Quran rendering uses the matching QPC V1 per-page fonts (604 TTF files),
+provided through QUL resource 238. Downloaded on 19 November 2026.
+https://qul.tarteel.ai/resources/font/238
+https://static-cdn.tarteel.ai/qul/fonts/quran_fonts/v1-optimized/ttf/
+Checksums are pinned in data/sources/quran-fonts.json.

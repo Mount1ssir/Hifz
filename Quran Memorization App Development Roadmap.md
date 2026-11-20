@@ -1,8 +1,12 @@
 # Quran Memorization App Development Roadmap
 
-_16 November 2026 · Checklist updated 17 November 2026_
+_16 November 2026 · Checklist updated 20 November 2026_
 
 ## Overview
+
+The product is a complete Quran app with dedicated Hifz and revision features.
+The Quran reader is the default entry point. Recall cards are removed for now;
+memorization and review use the same printed-page reader as everyday reading.
 
 Check a task after its stated result is verified. Check a phase's completion gate
 only after all required tasks and the gate itself are verified.
@@ -94,7 +98,34 @@ Implement the algorithms in pure Dart and write their tests before implementatio
 
 ### Week 5 — Onboarding and Hifz
 
-- [ ] Build onboarding with a surah checklist, partial-surah ayah ranges, daily quota, and a live projected finish date.
+- [x] Consolidate quota, previous memorization, syllabus, and review access into one header settings button and bottom sheet.
+- [x] Accept typed daily quotas and half-page selection (whole-ayah boundaries).
+- [x] Display only assigned verses in الحفظ. Open التثبيت directly on the same portion in hidden mode with a visible preceding ayah and word-by-word arrows.
+- [x] Add forward/backward word reveal in hidden-text mode, preserving printed word positions and per-page progress.
+- [x] Toggle page focus with a tap: hide or restore header, footer, and main tab bar; Back restores controls.
+- [x] Use a bottom-sheet Quran index inspired by the new reference images.
+- [x] Keep page and portion text size stable when toggling controls or word-by-word practice.
+- [x] Animate compact header/footer visibility and honor the device’s reduced-animation preference.
+- [x] Open the Quran index by tapping the header’s surah name; remove the placeholder search button.
+- [x] Use edge-aligned page numbers without totals and swipe navigation without page arrows.
+- [x] Show a green completion tick beside Assigned instead of a separate completion message.
+- [x] Show the full syllabus in Arabic, with memorized ranges green and checkmarked.
+- [x] Let learners enter previous memorization using whole surahs or multiple verse ranges anywhere in the Quran.
+  - [x] Add a two-handle range slider, precise verse-number fields, and first/last verse previews matching the supplied reference.
+  - [x] Recompute the displayed assignment after baseline edits instead of retaining a superseded completed portion.
+  - [x] Preserve earlier review history and allow the newly selected portion to be completed on the same day.
+  - [x] Verify the reported Baqarah 1–200 regression across a database restart; the next portion starts at Baqarah 201 when Al-Fatihah is already memorized.
+- [x] Reduce page-turn work with a bounded page-data cache, cached glyph measurements, and adjacent-page font preloading.
+- [ ] Confirm page-turn smoothness on the user's phone using the optimized build.
+- [x] Keep previous memorization separate from daily completion and review history; plan from the first unmemorized ayah and skip known ranges.
+- [x] Fit Quran pages above the footer with reserved vertical space and a scroll fallback for very small views.
+- [ ] Confirm the corrected footer and Hifz setup flow on the user's phone.
+
+
+- [x] Complete first-run Hifz onboarding.
+  - [x] Provide a surah checklist and partial-surah ranges through previous-memorization settings.
+  - [x] Provide typed daily quotas and a live projected finish date, based on one portion every day.
+  - [x] Connect previous memorization and daily quota to first-time Hifz setup, and open the planned portion on completion.
 - [x] Build the Hifz screen with a syllabus and a Today action that opens the daily assignment.
   - [x] Add a working daily portion screen with Arabic text, persisted ayah/line/page quotas, progress, and atomic completion.
   - [x] Install the update on the connected phone and visually verify the daily portion and Arabic text render.
@@ -110,34 +141,52 @@ daily assigned curriculum using the evidence-based scheduler from Phase 2.
 Learners shall be able to adjust repetition frequency and time intervals for
 their own cognitive load and recall performance.
 
-- [ ] Build the dedicated interface and open it from the Hifz Today card.
+- [ ] Build the dedicated interface and open it from the Hifz daily portion.
   - [x] Add a Review tab with due sessions, completed attempts, hidden-text recall, ratings, and editable intervals.
-  - [ ] Add a direct Today-card link to its review session.
+  - [x] Add a direct link from the completed daily portion to its review sessions.
   - [x] Show the assigned ayah ranges and the schedule of due, upcoming, and completed reviews.
   - [x] Prompt the learner to recite from memory with the assigned text hidden, then reveal the text for comparison and collect a recall rating.
   - [x] Feed the rating into the scheduler and show the updated next review time.
-  - [ ] Let the learner set the daily repetition count and intervals, preview the resulting schedule, and save or reset the settings.
+  - [x] Let the learner set the daily repetition count and intervals, preview the resulting schedule, and save or reset the settings.
   - [ ] Verify that the interface reflects the default schedule, a customized schedule, and a schedule updated after a weak recall attempt.
 - [ ] Build the Muraja’ah screen with revision-day selection, a partition preview, today's portion, and a completion action.
-- [ ] Build a minimal reader for session text using the KFGQPC Hafs font.
-  - [x] Render session text right-to-left with hide/reveal controls using the platform Arabic font.
-  - [x] Add flowing-text and recall-card modes based on the supplied reference images, with navigation and text sizing.
-  - [ ] Bundle and apply the KFGQPC Hafs font.
+- [x] Build a full offline Quran reader with the matching QUL KFGQPC V1 page fonts.
+  - [x] Import all 604 page fonts and pin their checksums alongside the QUL layout and word glyphs.
+  - [x] Preserve printed word order, line breaks, verse markers, surah headings, and basmalah rows.
+  - [x] Make Quran the default tab, with all 114 surahs, 30 juz, and page-number navigation.
+  - [x] Save the last reading page and bookmarks across restarts.
+  - [x] Use printed pages for daily assignments and recall, with assigned-ayah highlighting and hide/reveal controls.
+  - [x] Remove recall-card mode at the user's request.
+- [ ] Complete the reference-inspired Quran presentation.
+  - [ ] Import a compatible colored tajweed font/script/layout set; current V1 pages are monochrome.
+  - [ ] Verify page layout on the user's phone, including opening pages, surah transitions, and page 604.
+- [ ] Expand everyday Quran features.
+  - [x] Search the bundled Arabic verse text and open the selected ayah on its highlighted mushaf page.
+  - [ ] Add reciter selection, verse audio playback, and repeat controls for Hifz.
+  - [ ] Add optional translation and tafsir views with source attribution.
 
 ### Week 7 — Settings, persistence, and accessibility
 
-- [ ] Add settings and let learners edit their baseline and recompute their plan.
+- [x] Let learners edit their memorized baseline and recompute their plan.
+- [x] Make the Quran menu open general settings directly; keep surah selection on the clickable surah title without a settings button in the selector. Provide settings with memorized-baseline editing, reminder controls, consolidation access, and source notices.
 - [ ] Persist planning inputs, review settings, recall attempts, and completion logs. Derive schedules from those inputs and logs.
 - [ ] Verify after restarting the app that settings, attempts, completed reviews, and the next due review are restored.
-- [ ] Localize the MVP in Arabic and English using ARB files and verify RTL layout.
+- [x] Keep UI numbers and displayed dates in 0–9 digits while accepting Arabic numeric input. Original printed Quran verse-marker glyphs remain source-authentic.
+- [x] Make the current interface Arabic-only, including Material controls, messages, recall ratings, and RTL page navigation.
+- [ ] Verify all Arabic screens and large text on the phone. Other languages are deferred at the user’s request.
 - [ ] Verify dark mode and large font scales.
 - [ ] **Phase complete** — Use Hifz, active recall, and intraday reviews for one week and verify that Muraja’ah works from schedule setup through completion.
 
 ## Phase 4 — Reminders and polish (week 8)
 
-- [ ] Add daily Hifz reminders and reminders for upcoming intraday reviews with `flutter_local_notifications`.
-  - [ ] Request notification permission where required, schedule inexact reminders, and restore pending reminders after reboot.
-  - [ ] Verify that settings or due-time changes replace obsolete reminders and that completing a review cancels its pending reminder.
+- [x] Implement intraday review notifications with `flutter_local_notifications` using the existing scheduler.
+  - [x] Let the learner choose a daily session count and a distribution window, or custom gaps, with a preview.
+  - [x] Request Android notification permission when reminders are enabled and schedule inexact notifications at the derived times.
+  - [x] Register boot and app-update receivers to restore pending schedules.
+  - [x] Open consolidation from a notification and badge due sessions on the Review tab and Hifz review icon.
+  - [x] Verify scheduling, cancellation after recall, and disabling notifications through a mocked Android channel.
+- [ ] Verify actual notification delivery, permission denial, reboot restoration, and time-zone changes on the phone.
+- [ ] Add an independent daily Hifz-start reminder (separate from scheduled consolidation sessions).
 - [ ] Add an `integration_test` that onboards a learner, opens the assigned portion, completes an active recall review, and shows the next review time.
 - [ ] Configure Crashlytics or Sentry for crash reporting and verify that analytics are disabled and Quran progress stays on-device.
 - [ ] Add attributions for Quran text, font, QUL data, and open-source licenses.
@@ -196,3 +245,7 @@ Fees, store requirements, and platform behavior change, so re-check these before
 - Original research on the relationship between review spacing and delayed retention. [Cepeda et al., 2008](https://pubmed.ncbi.nlm.nih.gov/19076480/)
 - Original research on the effect of retrieval practice on later retention. [Karpicke and Roediger, 2007](https://learninglab.psych.purdue.edu/downloads/2007/2007_Karpicke_Roediger_JML.pdf)
 - Background on the original SM-2 algorithm and its design. [SuperMemo](https://www.supermemo.com/en/blog/the-true-history-of-spaced-repetition)
+
+- [x] Add review goals in التثبيت with range selection, a session preview, accumulated missed portions, manual reading logs, and opening the next passage in the full Quran.
+
+- [x] Let readers create open-ended passage goals, select named Quran ranges, and log sessions by their starting and ending ayahs. Count overlapping passages once.

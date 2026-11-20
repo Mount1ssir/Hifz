@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:sqlite3/sqlite3.dart';
 
 import '../../domain/riwayah.dart';
+import '../../domain/hifz_planner.dart';
 
 class QuranAyah {
   const QuranAyah({
@@ -26,9 +28,39 @@ class QuranAyah {
   final int juz;
 }
 
+class MushafWord {
+  const MushafWord(this.ayahId, this.glyph);
+  final int ayahId;
+  final String glyph;
+}
+
+class MushafLine {
+  const MushafLine(
+    this.number,
+    this.kind,
+    this.centered,
+    this.heading,
+    this.words,
+  );
+  final int number;
+  final String kind;
+  final bool centered;
+  final String? heading;
+  final List<MushafWord> words;
+}
+
+class SurahInfo {
+  const SurahInfo(this.number, this.name, this.page, this.ayahCount);
+  final int number;
+  final String name;
+  final int page;
+  final int ayahCount;
+}
+
 class QuranRepository {
   QuranRepository.open(File file, {required this.riwayah})
-    : _db = sqlite3.open(file.path, mode: OpenMode.readOnly) {
+    : _path = file.path,
+      _db = sqlite3.open(file.path, mode: OpenMode.readOnly) {
     try {
       final metadata = {
         for (final row in _db.select('SELECT key, value FROM metadata'))
@@ -47,6 +79,44 @@ class QuranRepository {
 
   final Riwayah riwayah;
   final Database _db;
+  final String _path;
+
+  Future<List<QuranAyah>> searchVerses(String query) {
+    final path = _path;
+    final tradition = riwayah;
+    return Isolate.run(() {
+      final repository = QuranRepository.open(File(path), riwayah: tradition);
+      try {
+        final terms = _searchText(query.replaceAll('ٰ', ''))
+            .split(' ')
+            .where((t) => t.isNotEmpty)
+            .toList();
+        if (terms.isEmpty) return <QuranAyah>[];
+        return repository.readRange(1, tradition.totalAyahs).where((ayah) {
+          final words = _searchText(ayah.text).split(' ');
+          for (var start = 0; start <= words.length - terms.length; start++) {
+            var index = 0;
+            while (index < terms.length) {
+              final word = words[start + index];
+              final term = terms[index];
+              if (!word.replaceAll('ٰ', '').contains(term) &&
+                  !word.replaceAll('ٰ', 'ا').contains(term)) {
+                break;
+              }
+              index++;
+            }
+            if (index == terms.length) return true;
+          }
+          return false;
+        }).toList();
+      } finally {
+        repository.close();
+      }
+    });
+  }
+
+  final Map<int, List<MushafLine>> _pageCache = {};
+  List<SurahInfo>? _surahs;
 
   List<QuranAyah> readRange(int first, int last) {
     riwayah.validateAyah(first);
@@ -80,6 +150,30 @@ class QuranRepository {
         as String,
   );
 
+  late final Map<int, int> printedPageWeights = _readPageWeights();
+
+  Map<int, int> _readPageWeights() {
+    final weights = <int, int>{};
+    final groups = _db.select(
+      'SELECT page, ayah_id, COUNT(*) AS words, SUM(COUNT(*)) OVER (PARTITION BY page) AS total '
+      'FROM mushaf_words GROUP BY page, ayah_id ORDER BY page, ayah_id',
+    );
+    var page = 0, words = 0, previous = 0;
+    for (final row in groups) {
+      if (page != row['page']) {
+        page = row['page'] as int;
+        words = 0;
+        previous = 0;
+      }
+      words += row['words'] as int;
+      final end = words * DailyQuota.pageScale ~/ (row['total'] as int);
+      final id = row['ayah_id'] as int;
+      weights[id] = (weights[id] ?? 0) + end - previous;
+      previous = end;
+    }
+    return Map.unmodifiable(weights);
+  }
+
   Map<int, int> lineWeights() {
     final weights = {
       for (final row in _db.select(
@@ -93,5 +187,98 @@ class QuranRepository {
     return Map.unmodifiable(weights);
   }
 
+  List<MushafLine> pageLines(int page) {
+    RangeError.checkValueInInterval(page, 1, 604, 'page');
+    final cached = _pageCache.remove(page);
+    if (cached != null) {
+      _pageCache[page] = cached;
+      return cached;
+    }
+    final words = _db.select(
+      'SELECT ayah_id, glyph, line FROM mushaf_words WHERE page=? ORDER BY id',
+      [page],
+    );
+    final result = _db
+        .select(
+          'SELECT l.*, s.name FROM mushaf_lines l LEFT JOIN surahs s ON s.id=l.surah '
+          'WHERE l.page=? ORDER BY l.line',
+          [page],
+        )
+        .map(
+          (row) => MushafLine(
+            row['line'] as int,
+            row['kind'] as String,
+            row['centered'] == 1,
+            row['name'] as String?,
+            [
+              for (final word in words)
+                if (word['line'] == row['line'])
+                  MushafWord(word['ayah_id'] as int, word['glyph'] as String),
+            ],
+          ),
+        )
+        .toList();
+    if (_pageCache.length >= 12) _pageCache.remove(_pageCache.keys.first);
+    _pageCache[page] = result;
+    return result;
+  }
+
+  List<int> pagesForAyahs(Iterable<int> ids) {
+    final pages = <int>{};
+    for (final id in ids) {
+      riwayah.validateAyah(id);
+      pages.addAll(
+        _db
+            .select('SELECT DISTINCT page FROM ayah_lines WHERE ayah_id=?', [
+              id,
+            ])
+            .map((row) => row['page'] as int),
+      );
+    }
+    return pages.toList()..sort();
+  }
+
+  List<SurahInfo> surahs() => _surahs ??= _db
+      .select(
+        'SELECT s.*, MIN(w.page) AS page FROM surahs s '
+        'JOIN mushaf_words w ON w.ayah_id=s.first_ayah_id GROUP BY s.id ORDER BY s.id',
+      )
+      .map(
+        (row) => SurahInfo(
+          row['id'] as int,
+          row['name'] as String,
+          row['page'] as int,
+          row['ayah_count'] as int,
+        ),
+      )
+      .toList();
+
+  int pageForJuz(int juz) {
+    RangeError.checkValueInInterval(juz, 1, 30, 'juz');
+    return _db.select('SELECT MIN(page) AS page FROM ayahs WHERE juz=?', [
+          juz,
+        ]).single['page']
+        as int;
+  }
+
+  String pageLabel(int page) {
+    final row = _db.select(
+      'SELECT s.name, a.juz FROM mushaf_words w JOIN ayahs a ON a.id=w.ayah_id '
+      'JOIN surahs s ON s.id=a.surah WHERE w.page=? ORDER BY w.id LIMIT 1',
+      [page],
+    ).single;
+    return '${row['name']} · الجزء ${row['juz']}';
+  }
+
   void close() => _db.close();
 }
+
+final _marks = RegExp(r'[ؐ-ؚـً-ٟۖ-ۭ]');
+final _alef = RegExp('[أإآٱ]');
+final _spaces = RegExp(r'\s+');
+String _searchText(String text) => text
+    .replaceAll(_marks, '')
+    .replaceAll(_alef, 'ا')
+    .replaceAll('ى', 'ي')
+    .trim()
+    .replaceAll(_spaces, ' ');

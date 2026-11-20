@@ -1,25 +1,44 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/foundation.dart';
 
 import '../core/data/quran_repository.dart';
 import '../domain/review_scheduler.dart';
-
-enum ReaderMode { page, cards }
+import 'mushaf_page.dart';
+import 'reader_controls.dart';
+import '../core/arabic.dart';
 
 class QuranReader extends StatefulWidget {
   const QuranReader({
     super.key,
+    required this.quran,
     required this.ayahs,
     required this.title,
-    this.initialMode = ReaderMode.page,
     this.startHidden = false,
     this.onComplete,
     this.onRecall,
+    this.actions = const [],
+    this.embedded = false,
+    this.onFocusChanged,
+    this.onSaved,
+    this.status,
+    this.onReview,
+    this.dueReviews,
+    this.showPreviousAyah = false,
+    this.showNextAyah = false,
   });
-
+  final QuranRepository quran;
   final List<QuranAyah> ayahs;
   final String title;
-  final ReaderMode initialMode;
   final bool startHidden;
+  final bool showPreviousAyah;
+  final bool showNextAyah;
+  final bool embedded;
+  final List<Widget> actions;
+  final ValueChanged<bool>? onFocusChanged;
+  final Future<void> Function()? onSaved;
+  final String? status;
+  final VoidCallback? onReview;
+  final ValueListenable<int>? dueReviews;
   final Future<void> Function()? onComplete;
   final Future<void> Function(RecallRating)? onRecall;
 
@@ -28,62 +47,71 @@ class QuranReader extends StatefulWidget {
 }
 
 class _QuranReaderState extends State<QuranReader> {
-  late ReaderMode _mode = widget.initialMode;
-  late final List<List<QuranAyah>> _pages = _groupPages();
-  late final Set<int> _visible = widget.startHidden
-      ? <int>{}
-      : widget.ayahs.map((ayah) => ayah.id).toSet();
-  final ScrollController _scroll = ScrollController();
+  late final List<int> _pages = widget.quran.pagesForAyahs({
+    ...widget.ayahs.map((a) => a.id),
+    ..._context,
+  });
+  late final Set<int> _visible = widget.startHidden ? {} : _pages.toSet();
+  final PageController _controller = PageController();
   int _index = 0;
-  double _fontSize = 30;
   bool _saving = false;
-  String? _error;
+  bool _focus = false;
+  final Map<int, int> _revealed = {};
+  late final Set<int> _context = {
+    if (widget.showPreviousAyah &&
+        widget.ayahs.isNotEmpty &&
+        widget.ayahs.first.id > 1)
+      widget.ayahs.first.id - 1,
+    if (widget.showNextAyah &&
+        widget.ayahs.isNotEmpty &&
+        widget.ayahs.last.id < widget.quran.riwayah.totalAyahs)
+      widget.ayahs.last.id + 1,
+  };
+  late final Set<int> _assigned = widget.ayahs.map((a) => a.id).toSet();
+  late final Map<int, int> _wordCounts = {
+    for (final page in _pages)
+      page: widget.quran
+          .pageLines(page)
+          .expand((line) => line.words)
+          .where((word) => _assigned.contains(word.ayahId))
+          .length,
+  };
 
-  List<List<QuranAyah>> _groupPages() {
-    final pages = <List<QuranAyah>>[];
-    for (final ayah in widget.ayahs) {
-      if (pages.isEmpty || pages.last.last.page != ayah.page) pages.add([]);
-      pages.last.add(ayah);
+  void _stepAyah(int page, bool reveal) {
+    final words = widget.quran
+        .pageLines(page)
+        .expand((line) => line.words)
+        .where((word) => _assigned.contains(word.ayahId))
+        .toList();
+    var cursor = _revealed[page] ?? 0;
+    if (reveal && cursor < words.length) {
+      final id = words[cursor].ayahId;
+      while (cursor < words.length && words[cursor].ayahId == id) {
+        cursor++;
+      }
+    } else if (!reveal && cursor > 0) {
+      final id = words[cursor - 1].ayahId;
+      while (cursor > 0 && words[cursor - 1].ayahId == id) {
+        cursor--;
+      }
     }
-    return pages;
+    setState(() => _revealed[page] = cursor);
   }
+
+  void _toggleFocus() {
+    setState(() => _focus = !_focus);
+    widget.onFocusChanged?.call(_focus);
+  }
+
+  bool _compared(int page) =>
+      _visible.contains(page) || (_revealed[page] ?? 0) >= _wordCounts[page]!;
+  String? _error;
 
   @override
   void dispose() {
-    _scroll.dispose();
+    _controller.dispose();
     super.dispose();
   }
-
-  int get _pageIndex => _pages.indexWhere(
-    (page) => page.any((a) => a.id == widget.ayahs[_index].id),
-  );
-  List<QuranAyah> get _current =>
-      _mode == ReaderMode.cards ? [widget.ayahs[_index]] : _pages[_pageIndex];
-  bool get _shown => _current.every((ayah) => _visible.contains(ayah.id));
-  bool get _last => _mode == ReaderMode.cards
-      ? _index == widget.ayahs.length - 1
-      : _pageIndex == _pages.length - 1;
-  bool get _first => _mode == ReaderMode.cards ? _index == 0 : _pageIndex == 0;
-
-  void _move(int direction) {
-    setState(() {
-      _index = _mode == ReaderMode.cards
-          ? _index + direction
-          : widget.ayahs.indexOf(_pages[_pageIndex + direction].first);
-    });
-    if (_scroll.hasClients) _scroll.jumpTo(0);
-  }
-
-  void _toggleText() => setState(() {
-    final hide = _shown;
-    for (final ayah in _current) {
-      if (hide) {
-        _visible.remove(ayah.id);
-      } else {
-        _visible.add(ayah.id);
-      }
-    }
-  });
 
   Future<void> _save({RecallRating? rating}) async {
     setState(() {
@@ -96,353 +124,317 @@ class _QuranReaderState extends State<QuranReader> {
       } else {
         await widget.onComplete!();
       }
-      if (mounted) Navigator.pop(context, true);
+      if (!mounted) return;
+      if (widget.embedded) {
+        await widget.onSaved?.call();
+        if (mounted) setState(() => _saving = false);
+      } else {
+        Navigator.pop(context, true);
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error =
-              'Could not save. Try again, or return to refresh the schedule.';
+          _error = 'تعذر الحفظ. أعد المحاولة أو ارجع لتحديث الجدول.';
         });
       }
     }
   }
 
-  Future<void> _textSettings() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => StatefulBuilder(
-        builder: (context, update) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Arabic text size'),
-                Slider(
-                  value: _fontSize,
-                  min: 22,
-                  max: 44,
-                  divisions: 11,
-                  label: '${_fontSize.round()}',
-                  onChanged: (value) {
-                    update(() => _fontSize = value);
-                    setState(() {});
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (widget.ayahs.isEmpty) {
+    if (_pages.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.title)),
-        body: const Center(child: Text('No ayahs in this portion.')),
+        appBar: _focus
+            ? null
+            : AppBar(
+                automaticallyImplyLeading: !widget.embedded,
+                actions: widget.actions,
+                title: Text(widget.title),
+              ),
+        body: const Center(child: Text('لا توجد آيات في هذا الورد.')),
       );
     }
-    final current = _current;
-    final ayah = current.first;
-    final colors = Theme.of(context).colorScheme;
+    final page = _pages[_index];
+    final shown = _visible.contains(page);
     return PopScope(
-      canPop: !_saving,
+      canPop: !_saving && !_focus,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && !_saving && _focus) _toggleFocus();
+      },
       child: Scaffold(
         backgroundColor: const Color(0xfffaf9f6),
-        appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        body: SafeArea(
+          child: Column(
             children: [
-              Text(
-                widget.title,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              Text(
-                'Surah ${ayah.surah} · Page ${ayah.page} · Juz ${ayah.juz}',
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              onPressed: _saving ? null : _textSettings,
-              tooltip: 'Text size',
-              icon: const Icon(Icons.text_fields),
-            ),
-          ],
-        ),
-        body: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${widget.ayahs.first.surah}:${widget.ayahs.first.number} – '
-                      '${widget.ayahs.last.surah}:${widget.ayahs.last.number}',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                  ),
-                  SegmentedButton<ReaderMode>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(
-                        value: ReaderMode.page,
-                        icon: Icon(Icons.menu_book),
-                        label: Text('Read'),
-                      ),
-                      ButtonSegment(
-                        value: ReaderMode.cards,
-                        icon: Icon(Icons.style_outlined),
-                        label: Text('Cards'),
-                      ),
-                    ],
-                    selected: {_mode},
-                    onSelectionChanged: _saving
-                        ? null
-                        : (value) {
-                            setState(() => _mode = value.single);
-                            if (_scroll.hasClients) _scroll.jumpTo(0);
-                          },
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                controller: _scroll,
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  _mode == ReaderMode.cards ? 28 : 12,
-                  20,
-                  24,
-                ),
-                child: _mode == ReaderMode.cards ? _card(ayah) : _page(current),
-              ),
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(_error!, style: TextStyle(color: colors.error)),
-              ),
-            SafeArea(
-              top: false,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: colors.surface,
-                  border: Border(top: BorderSide(color: colors.outlineVariant)),
-                ),
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+              ReaderControls(
+                visible: !_focus,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    LinearProgressIndicator(
-                      value: _mode == ReaderMode.cards
-                          ? (_index + 1) / widget.ayahs.length
-                          : (_pageIndex + 1) / _pages.length,
-                      minHeight: 3,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          onPressed: _first || _saving ? null : () => _move(-1),
-                          tooltip: 'Previous',
-                          icon: const Icon(Icons.chevron_left),
-                        ),
-                        IconButton(
-                          onPressed: _saving ? null : _toggleText,
-                          tooltip: _shown ? 'Hide text' : 'Reveal text',
-                          icon: Icon(
-                            _shown
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                        ),
-                        Text(
-                          _mode == ReaderMode.cards
-                              ? 'Ayah ${_index + 1} / ${widget.ayahs.length}'
-                              : 'Page ${_pageIndex + 1} / ${_pages.length}',
-                        ),
-                        FilledButton.tonal(
-                          onPressed: _last || _saving ? null : () => _move(1),
-                          child: const Icon(Icons.chevron_right),
-                        ),
-                      ],
-                    ),
-                    if (_last &&
-                        widget.onRecall != null &&
-                        _visible.length == widget.ayahs.length) ...[
-                      const Text('How was your recall of the whole portion?'),
-                      Wrap(
-                        spacing: 8,
+                    SizedBox(
+                      height: 48,
+                      child: Row(
                         children: [
-                          for (final rating in RecallRating.values)
-                            TextButton(
-                              onPressed: _saving
-                                  ? null
-                                  : () => _save(rating: rating),
-                              child: Text(switch (rating) {
-                                RecallRating.again => 'Again',
-                                RecallRating.hard => 'Hard',
-                                RecallRating.good => 'Good',
-                                RecallRating.easy => 'Easy',
-                              }),
+                          if (!widget.embedded) const BackButton(),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: Text(
+                                widget.title,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ),
+                          ),
+                          ...widget.actions,
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 2,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'الورد · ${widget.ayahs.first.surah}:${widget.ayahs.first.number} – ${widget.ayahs.last.surah}:${widget.ayahs.last.number}',
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
+                          ),
+                          if (widget.status != null)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 6),
+                              child: Tooltip(
+                                message: 'اكتمل حفظ الورد',
+                                child: Icon(
+                                  Icons.check,
+                                  color: Color(0xff28b835),
+                                  size: 20,
+                                ),
+                              ),
                             ),
                         ],
                       ),
-                    ] else if (_last && widget.onRecall != null)
-                      const Text(
-                        'Reveal each ayah to compare before rating the portion.',
-                      ),
-                    if (_last && widget.onComplete != null)
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: _saving ? null : () => _save(),
-                          icon: const Icon(Icons.check),
-                          label: Text(
-                            _saving ? 'Saving…' : 'Mark portion memorized',
-                          ),
-                        ),
-                      ),
+                    ),
                   ],
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _page(List<QuranAyah> ayahs) {
-    final spans = <InlineSpan>[];
-    for (var index = 0; index < ayahs.length; index++) {
-      final ayah = ayahs[index];
-      if (index > 0 && ayah.id != ayahs[index - 1].id + 1) {
-        spans.add(const TextSpan(text: '\n⋯\n'));
-      }
-      if (_visible.contains(ayah.id)) {
-        spans.add(TextSpan(text: '${ayah.text} ﴿${ayah.number}﴾ '));
-      } else {
-        spans.add(
-          WidgetSpan(
-            child: Semantics(
-              label: 'Hidden ayah ${ayah.surah}:${ayah.number}',
-              child: Container(
-                height: 36,
-                width: 160,
-                margin: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xffdce3ee),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-    return Column(
-      children: [
-        if (!_shown)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 16),
-            child: Text('Recite from memory, then reveal to compare.'),
-          ),
-        Text.rich(
-          TextSpan(children: spans),
-          textDirection: TextDirection.rtl,
-          textAlign: TextAlign.justify,
-          style: TextStyle(
-            fontSize: _fontSize,
-            height: 2.15,
-            color: const Color(0xff202624),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _card(QuranAyah ayah) => Stack(
-    children: [
-      Positioned(
-        top: 0,
-        left: 24,
-        right: 24,
-        child: Container(
-          height: 90,
-          decoration: BoxDecoration(
-            color: const Color(0xffd7dfeb),
-            borderRadius: BorderRadius.circular(28),
-          ),
-        ),
-      ),
-      Padding(
-        padding: const EdgeInsets.only(top: 14),
-        child: Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(minHeight: 360),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xffeef0fc), Color(0xffe2e8f6), Color(0xffa9c5e9)],
-            ),
-          ),
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_shown)
-                Text(
-                  ayah.text,
-                  textDirection: TextDirection.rtl,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: _fontSize + 2,
-                    height: 2.1,
-                    color: const Color(0xff172b3f),
-                  ),
-                )
-              else ...[
-                const Text(
-                  'Recite this ayah from memory',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                for (var i = 0; i < 3; i++)
-                  Container(
-                    height: 34,
-                    margin: const EdgeInsets.only(bottom: 24),
-                    decoration: BoxDecoration(
-                      color: const Color(0xffcfd9ef),
-                      borderRadius: BorderRadius.circular(8),
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _saving ? null : _toggleFocus,
+                  child: PageView.builder(
+                    controller: _controller,
+                    reverse: false,
+                    itemCount: _pages.length,
+                    physics: _saving
+                        ? const NeverScrollableScrollPhysics()
+                        : null,
+                    onPageChanged: (index) => setState(() => _index = index),
+                    itemBuilder: (_, index) => MushafPage(
+                      quran: widget.quran,
+                      page: _pages[index],
+                      selectedAyahs: _assigned,
+                      contextAyahs: _context,
+                      revealedWordCount: _revealed[_pages[index]] ?? 0,
+                      hidden: !_visible.contains(_pages[index]),
                     ),
                   ),
-                OutlinedButton(
-                  onPressed: _toggleText,
-                  child: const Text('Reveal ayah'),
                 ),
-              ],
-              const SizedBox(height: 28),
-              Text(
-                'Surah ${ayah.surah} · Ayah ${ayah.number}',
-                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              if (_error != null)
+                Padding(padding: const EdgeInsets.all(8), child: Text(_error!)),
+              ReaderControls(
+                visible: !_focus,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: 48,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minWidth: MediaQuery.sizeOf(context).width - 24,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '$page',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelMedium,
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (!shown)
+                                      Row(
+                                        textDirection: TextDirection.ltr,
+                                        children: [
+                                          IconButton(
+                                            tooltip: 'إظهار الآية التالية',
+                                            onPressed:
+                                                _saving ||
+                                                    (_revealed[page] ?? 0) >=
+                                                        _wordCounts[page]!
+                                                ? null
+                                                : () => _stepAyah(page, true),
+                                            icon: const Icon(
+                                              Icons.keyboard_double_arrow_left,
+                                              textDirection: TextDirection.ltr,
+                                            ),
+                                          ),
+                                          IconButton(
+                                            tooltip: 'إظهار الكلمة التالية',
+                                            onPressed:
+                                                _saving ||
+                                                    (_revealed[page] ?? 0) >=
+                                                        _wordCounts[page]!
+                                                ? null
+                                                : () => setState(
+                                                    () => _revealed[page] =
+                                                        (_revealed[page] ?? 0) +
+                                                        1,
+                                                  ),
+                                            icon: const Icon(
+                                              Icons.chevron_left,
+                                              textDirection: TextDirection.ltr,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${_revealed[page] ?? 0}/${_wordCounts[page]}',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .labelSmall,
+                                          ),
+                                          IconButton(
+                                            tooltip: 'إخفاء الكلمة السابقة',
+                                            onPressed:
+                                                _saving ||
+                                                    (_revealed[page] ?? 0) == 0
+                                                ? null
+                                                : () => setState(
+                                                    () => _revealed[page] =
+                                                        (_revealed[page] ?? 0) -
+                                                        1,
+                                                  ),
+                                            icon: const Icon(
+                                              Icons.chevron_right,
+                                              textDirection: TextDirection.ltr,
+                                            ),
+                                          ),
+                                          IconButton(
+                                            tooltip: 'إخفاء الآية السابقة',
+                                            onPressed:
+                                                _saving ||
+                                                    (_revealed[page] ?? 0) == 0
+                                                ? null
+                                                : () => _stepAyah(page, false),
+                                            icon: const Icon(
+                                              Icons.keyboard_double_arrow_right,
+                                              textDirection: TextDirection.ltr,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    IconButton(
+                                      tooltip: shown
+                                          ? 'إخفاء الآيات'
+                                          : 'إظهار الآيات',
+                                      onPressed: _saving
+                                          ? null
+                                          : () => setState(() {
+                                              if (shown) {
+                                                _visible.remove(page);
+                                                _revealed[page] = 0;
+                                              } else {
+                                                _visible.add(page);
+                                              }
+                                            }),
+                                      icon: Icon(
+                                        shown
+                                            ? Icons.visibility_off_outlined
+                                            : Icons.visibility_outlined,
+                                      ),
+                                    ),
+                                    if (_index == _pages.length - 1 &&
+                                        widget.onComplete != null)
+                                      IconButton(
+                                        tooltip: _saving
+                                            ? 'جارٍ الحفظ…'
+                                            : 'تم حفظ الورد',
+                                        onPressed: _saving
+                                            ? null
+                                            : () => _save(),
+                                        icon: const Icon(
+                                          Icons.check_circle_outline,
+                                        ),
+                                      ),
+                                    if (widget.onReview != null)
+                                      IconButton(
+                                        tooltip: 'مراجعة ورد اليوم',
+                                        onPressed: _saving
+                                            ? null
+                                            : widget.onReview,
+                                        icon: widget.dueReviews == null
+                                            ? const Icon(Icons.history)
+                                            : ValueListenableBuilder<int>(
+                                                valueListenable:
+                                                    widget.dueReviews!,
+                                                builder: (_, count, _) => Badge(
+                                                  isLabelVisible: count > 0,
+                                                  child: const Icon(
+                                                    Icons.history,
+                                                  ),
+                                                ),
+                                              ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_index == _pages.length - 1 &&
+                          widget.onRecall != null)
+                        !_pages.every(_compared)
+                            ? const Padding(
+                                padding: EdgeInsets.only(bottom: 4),
+                                child: Text(
+                                  'أظهر كل صفحة للمقارنة قبل تقييم التذكر.',
+                                ),
+                              )
+                            : Wrap(
+                                spacing: 4,
+                                children: [
+                                  for (final rating in RecallRating.values)
+                                    TextButton(
+                                      onPressed: _saving
+                                          ? null
+                                          : () => _save(rating: rating),
+                                      child: Text(recallLabel(rating)),
+                                    ),
+                                ],
+                              ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
         ),
       ),
-    ],
-  );
+    );
+  }
 }

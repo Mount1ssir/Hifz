@@ -25,8 +25,9 @@ snapshot of the ayah IDs. Review attempts are append-only by session and ordinal
 Saving a duplicate ordinal has no effect. A transaction checks that the next
 review is due before saving its rating and timestamp. Memorization completion
 and recall attempts are stored separately. The schema upgrade preserves prior
-progress. Today's completed portion from older versions starts a review session
-on the next visit to Memorize without changing its progress entries.
+progress. Existing review sessions and completion history remain preserved. A baseline
+revision invalidates the currently displayed completed portion, and completion
+of its replacement gets a distinct session identity even on the same day.
 
 An overdue review remains due across midnight. Later preview times account for
 the overdue review being completed no earlier than now, preventing a queue of
@@ -39,5 +40,27 @@ continues independently of outstanding review sessions.
 The Review tab shows due times, estimated later times, and completed ratings.
 A due session opens with hidden text, then allows reveal and self-rating.
 The dashboard refreshes while open and after returning from the background.
-System notifications and the broader Muraja’ah partition interface are later
-roadmap tasks.
+The broader Muraja’ah partition interface remains a later roadmap task.
+
+
+## Android reminders (20 November 2026)
+
+Learners can choose 1–8 sessions distributed over 1–24 hours after completing
+memorization, or keep custom minute gaps. A preview is shown before saving.
+Adaptive ratings continue to update subsequent times through the existing
+scheduler. Reminder times use UTC instants and local times for display.
+
+`flutter_local_notifications` 19.5 is compatible with the project's Android
+SDK. Notifications are scheduled with `inexactAllowWhileIdle`: Android may delay
+delivery to conserve battery. Enabling notifications requests the Android
+permission; denial is shown in Arabic without losing saved review settings.
+The boot/app-update receiver restores plugin-persisted schedules. On resume,
+settings changes, portion completion, and recall completion, schedules are
+reconciled. Overdue reviews remain visible with a red badge without generating
+repeated immediate alerts each time the app opens. Notification taps open
+consolidation. The badge refers to due reviews, not an OEM-specific launcher badge.
+
+Source: [plugin setup and scheduling documentation](https://pub.dev/packages/flutter_local_notifications/versions/19.5.0).
+The automated check covers Android scheduling calls and cancellation. Physical
+notification delivery, reboot behavior, and battery restrictions still need a
+phone check; these are not claimed as verified.

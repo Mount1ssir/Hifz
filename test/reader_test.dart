@@ -1,72 +1,313 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:hifz/core/data/quran_repository.dart';
+import 'package:hifz/domain/riwayah.dart';
 import 'package:hifz/domain/review_scheduler.dart';
 import 'package:hifz/features/quran_reader.dart';
+import 'package:hifz/features/mushaf_page.dart';
 
 void main() {
-  const ayahs = [
-    QuranAyah(
-      id: 1,
-      surah: 1,
-      number: 1,
-      text: 'First test text',
-      basmalahPrefix: '',
-      page: 1,
-      juz: 1,
+  late QuranRepository quran;
+  setUp(
+    () => quran = QuranRepository.open(
+      File('assets/data/quran.db'),
+      riwayah: Riwayah.hafs,
     ),
-    QuranAyah(
-      id: 2,
-      surah: 1,
-      number: 2,
-      text: 'Second test text',
-      basmalahPrefix: '',
-      page: 1,
-      juz: 1,
-    ),
-  ];
+  );
+  tearDown(() => quran.close());
 
-  testWidgets('recall cards conceal text and save only after comparison', (
+  test(
+    'offline verse search accepts ordinary Arabic and returns the mushaf page',
+    () async {
+      final results = await quran.searchVerses('الحمد لله رب العالمين');
+      final verse = results.first;
+      expect((verse.surah, verse.number, verse.page), (1, 2, 1));
+      expect((await quran.searchVerses(verse.text)).first.id, verse.id);
+      expect(await quran.searchVerses('َ'), isEmpty);
+    },
+  );
+
+  testWidgets(
+    'page recall requires revealing the assigned page before rating',
+    (tester) async {
+      RecallRating? saved;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: QuranReader(
+            quran: quran,
+            ayahs: quran.readRange(1, 7),
+            title: 'Recall',
+            startHidden: true,
+            onRecall: (rating) async {
+              saved = rating;
+            },
+          ),
+        ),
+      );
+      // Font decoding runs outside the widget test's fake clock.
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (find.byType(CircularProgressIndicator).evaluate().isNotEmpty &&
+          DateTime.now().isBefore(deadline)) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('جيد'), findsNothing);
+      expect(find.text('Cards'), findsNothing);
+      await tester.tap(find.byTooltip('إظهار الآيات'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('جيد'));
+      await tester.pumpAndSettle();
+      expect(saved, RecallRating.good);
+    },
+  );
+
+  testWidgets('assigned pages omit surrounding verses and fit above a footer', (
     tester,
   ) async {
-    RecallRating? saved;
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final words = quran.pageLines(44).expand((line) => line.words).toList();
+    final selected = words[words.length ~/ 2].ayahId;
     await tester.pumpWidget(
       MaterialApp(
-        home: QuranReader(
-          ayahs: ayahs,
-          title: 'Recall',
-          initialMode: ReaderMode.cards,
-          startHidden: true,
-          onRecall: (rating) async {
-            saved = rating;
-          },
+        home: Scaffold(
+          body: Column(
+            children: [
+              Expanded(
+                child: MushafPage(
+                  quran: quran,
+                  page: 44,
+                  selectedAyahs: {selected},
+                ),
+              ),
+              const SizedBox(height: 100, child: Text('Footer')),
+            ],
+          ),
         ),
       ),
     );
-    expect(find.text('First test text'), findsNothing);
-    expect(find.text('Good'), findsNothing);
-    await tester.ensureVisible(find.text('Reveal ayah'));
-    await tester.tap(find.text('Reveal ayah'));
-    await tester.pump();
-    expect(find.text('First test text'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.chevron_right));
-    await tester.pump();
-    expect(find.text('Second test text'), findsNothing);
-    expect(find.text('Good'), findsNothing);
-    await tester.ensureVisible(find.text('Reveal ayah'));
-    await tester.tap(find.text('Reveal ayah'));
-    await tester.pump();
-    await tester.tap(find.text('Good'));
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (find.byType(CircularProgressIndicator).evaluate().isNotEmpty &&
+        DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
     await tester.pumpAndSettle();
-    expect(saved, RecallRating.good);
+    for (final word in words.where((word) => word.ayahId != selected)) {
+      expect(find.text(word.glyph), findsNothing);
+    }
+    final visible = words.where((word) => word.ayahId == selected).last;
+    expect(find.text(visible.glyph), findsWidgets);
+    expect(
+      tester.getBottomLeft(find.text(visible.glyph).last).dy,
+      lessThanOrEqualTo(540),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              Expanded(child: MushafPage(quran: quran, page: 44)),
+              const SizedBox(height: 100, child: Text('Footer')),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getBottomLeft(find.text(words.last.glyph).last).dy,
+      lessThanOrEqualTo(540),
+    );
+    expect(tester.takeException(), isNull);
+    final pageSize = tester
+        .widget<Text>(find.text(words.last.glyph).last)
+        .style!
+        .fontSize;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: MushafPage(quran: quran, page: 44)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(find.text(words.last.glyph).last).style!.fontSize,
+      pageSize,
+    );
+  });
+
+  testWidgets(
+    'inline reading reveals words progressively and restores controls',
+    (tester) async {
+      var focused = false;
+      var saved = 0;
+      final words = quran.pageLines(1).expand((line) => line.words).toList();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: QuranReader(
+            quran: quran,
+            ayahs: quran.readRange(1, 7),
+            title: 'Today',
+            embedded: true,
+            startHidden: true,
+            onFocusChanged: (value) => focused = value,
+            onComplete: () async {
+              saved++;
+            },
+            onSaved: () async {},
+            actions: [
+              IconButton(
+                tooltip: 'Settings',
+                onPressed: () {},
+                icon: const Icon(Icons.settings),
+              ),
+            ],
+          ),
+        ),
+      );
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (find.byType(CircularProgressIndicator).evaluate().isNotEmpty &&
+          DateTime.now().isBefore(deadline)) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(find.text(words.first.glyph), findsNothing);
+      final reveal = find.byTooltip('إظهار الكلمة التالية');
+      final hide = find.byTooltip('إخفاء الكلمة السابقة');
+      expect(tester.getCenter(reveal).dx, lessThan(tester.getCenter(hide).dx));
+      expect(
+        find.descendant(of: reveal, matching: find.byIcon(Icons.chevron_left)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: hide, matching: find.byIcon(Icons.chevron_right)),
+        findsOneWidget,
+      );
+      await tester.tap(find.byTooltip('إظهار الآية التالية'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(words.lastWhere((w) => w.ayahId == words.first.ayahId).glyph),
+        findsWidgets,
+      );
+      expect(
+        find.text(
+          words.firstWhere((w) => w.ayahId != words.first.ayahId).glyph,
+        ),
+        findsNothing,
+      );
+      await tester.tap(find.byTooltip('إخفاء الآية السابقة'));
+      await tester.pumpAndSettle();
+      expect(find.text(words.first.glyph), findsNothing);
+      await tester.tap(find.byTooltip('إظهار الكلمة التالية'));
+      await tester.pumpAndSettle();
+      expect(find.text(words.first.glyph), findsOneWidget);
+      final practiceSize = tester
+          .widget<Text>(find.text(words.first.glyph))
+          .style!
+          .fontSize;
+      expect(find.text(words[1].glyph), findsNothing);
+      await tester.tap(find.byTooltip('إظهار الكلمة التالية'));
+      await tester.pumpAndSettle();
+      expect(find.text(words[1].glyph), findsOneWidget);
+      await tester.tap(find.byTooltip('إخفاء الكلمة السابقة'));
+      await tester.pumpAndSettle();
+      expect(find.text(words[1].glyph), findsNothing);
+      await tester.tap(find.byType(MushafPage));
+      await tester.pumpAndSettle();
+      expect(focused, isTrue);
+      expect(
+        tester.widget<Text>(find.text(words.first.glyph)).style!.fontSize,
+        practiceSize,
+      );
+      expect(find.byType(AppBar), findsNothing);
+      expect(
+        find.byTooltip('إظهار الكلمة التالية').hitTestable(),
+        findsNothing,
+      );
+      await tester.tap(find.byType(MushafPage));
+      await tester.pumpAndSettle();
+      expect(focused, isFalse);
+      expect(find.byTooltip('Settings'), findsOneWidget);
+      expect(find.text(words.first.glyph), findsOneWidget);
+      await tester.tap(find.byTooltip('إظهار الآيات'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<Text>(find.text(words.first.glyph)).style!.fontSize,
+        practiceSize,
+      );
+      await tester.tap(find.byTooltip('تم حفظ الورد'));
+      await tester.pumpAndSettle();
+      expect(saved, 1);
+      expect(find.byType(QuranReader), findsOneWidget);
+    },
+  );
+
+  testWidgets('linking verses stay visible outside the assigned recall range', (
+    tester,
+  ) async {
+    final words = quran.pageLines(1).expand((line) => line.words).toList();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QuranReader(
+          quran: quran,
+          ayahs: quran.readRange(3, 3),
+          title: 'ورد اليوم',
+          showPreviousAyah: true,
+          showNextAyah: true,
+          startHidden: true,
+        ),
+      ),
+    );
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (find.byType(CircularProgressIndicator).evaluate().isNotEmpty &&
+        DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    for (final word in words.where((w) => w.ayahId == 2 || w.ayahId == 4)) {
+      expect(find.text(word.glyph), findsOneWidget);
+    }
+    for (final word in words.where((w) => w.ayahId != 2 && w.ayahId != 4)) {
+      expect(find.text(word.glyph), findsNothing);
+    }
+    await tester.tap(find.byTooltip('إظهار الكلمة التالية'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(words.firstWhere((w) => w.ayahId == 3).glyph),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<QuranReader>(find.byType(QuranReader))
+          .ayahs
+          .map((a) => a.id),
+      [3],
+    );
   });
 
   testWidgets('empty portions show an explicit message', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: QuranReader(ayahs: [], title: 'Reader'),
+      MaterialApp(
+        home: QuranReader(quran: quran, ayahs: const [], title: 'Reader'),
       ),
     );
-    expect(find.text('No ayahs in this portion.'), findsOneWidget);
+    expect(find.text('لا توجد آيات في هذا الورد.'), findsOneWidget);
   });
 }

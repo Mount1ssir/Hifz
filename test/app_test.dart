@@ -10,10 +10,10 @@ void main() {
   ) async {
     final opening = Completer<AppDatabases>();
     await tester.pumpWidget(HifzApp(openDatabases: () => opening.future));
-    expect(find.text('Hifz'), findsOneWidget);
-    expect(find.text('Opening your Quran…'), findsOneWidget);
+    expect(find.text('حفظ'), findsOneWidget);
+    expect(find.text('جارٍ فتح القرآن…'), findsOneWidget);
     opening.completeError(StateError('Unavailable database'));
     await tester.pumpAndSettle();
-    expect(find.text('Try again'), findsOneWidget);
+    expect(find.text('إعادة المحاولة'), findsOneWidget);
   });
 }

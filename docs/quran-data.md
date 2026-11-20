@@ -24,8 +24,10 @@ The supplied QUL archives are pinned in `data/sources/` with SHA-256 hashes.
 The importer joins 83,668 word IDs to the V1 printed line ranges and stores
 13,766 distinct `(ayah_id, page, line)` records in `ayah_lines`. It rejects missing
 words, duplicate assignments, invalid line coordinates, and incomplete coverage.
-The bundle covers all 6,236 ayahs and 604 printed pages. QUL glyph text is used
-only to identify word records; the rendered text remains the original Tanzil text.
+The bundle covers all 6,236 ayahs and 604 printed pages. The importer also stores every original word glyph in `mushaf_words` and all
+printed rows in `mushaf_lines`, including headings and basmalahs. These glyphs
+render through their matching per-page font; the original Tanzil text remains
+unchanged in `ayahs` for semantic text access.
 
 The planner counts distinct printed lines touched by each ayah. Shared lines
 count for each touching ayah, matching the Phase 0 workload decision. A page
@@ -34,7 +36,7 @@ keeping the final ayah whole. These values measure approximate reading workload.
 The app's quota dialog offers ayahs, lines, and pages and saves both the amount
 and unit atomically. Existing settings retain their ayah unit.
 
-Only the generated database, checksum, and attribution files are Flutter assets.
+The generated database, checksum, attribution files, and page fonts are Flutter assets.
 The original uploaded archives remain in `assets/data/`, while reproducible
 imports use the pinned copies in `data/sources/`.
 On 18 November 2026 the user reported that QUL’s platform and email confirmed
@@ -68,3 +70,18 @@ low-end device target.
 
 The user reports receiving usage confirmation from QUL. The earlier
 [licensing question](qul-license-request.md) is retained as background.
+
+## Printed Quran pages
+
+All 604 matching QPC V1 TTF fonts are bundled in `assets/quran_fonts/` and loaded
+on demand. The resource URL and every font SHA-256 are pinned in
+`data/sources/quran-fonts.json`. `python3 tool/fetch_quran_fonts.py` restores missing
+files from QUL using curl and rejects changes against the pinned manifest.
+[QUL font resource](https://qul.tarteel.ai/resources/font/238).
+
+Pages retain the source word order and line breaks, and scale their text to the
+available width. Short screens scroll vertically instead of reflowing the lines.
+Surah headings and basmalah labels use standard Arabic text. V1 is monochrome;
+colored tajweed needs a matching font and word-script dataset and remains pending.
+The reader's position and bookmarks are stored in user.db preferences, so updating
+Quran assets does not erase them or Hifz progress.

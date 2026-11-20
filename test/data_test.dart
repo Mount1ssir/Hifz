@@ -7,9 +7,71 @@ import 'package:hifz/core/data/quran_repository.dart';
 import 'package:hifz/core/data/user_database.dart';
 import 'package:hifz/domain/riwayah.dart';
 import 'package:hifz/domain/hifz_planner.dart';
+import 'package:hifz/domain/range_set.dart';
 import 'package:hifz/domain/review_scheduler.dart';
 
 void main() {
+  test('Baqarah baseline supersedes completed portion and allows the next portion today', () async {
+    final dir = await Directory.systemTemp.createTemp('hifz-rebase');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/user.db');
+    var db = UserDatabase(NativeDatabase(file));
+    final now = DateTime.now();
+    for (var id = 1; id <= 13; id++) {
+      await db.markMemorized(
+        Riwayah.hafs,
+        id,
+        now.subtract(const Duration(days: 1)),
+      );
+    }
+    await db.completePortion(Riwayah.hafs, [14, 15, 16, 17, 18, 19, 20], now);
+    expect(await db.completedToday(Riwayah.hafs, now), [
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+    ]);
+    await db.saveMemorizedBaseline(Riwayah.hafs, {
+      for (var id = 8; id <= 207; id++) id,
+    });
+    await db.close();
+    db = UserDatabase(NativeDatabase(file));
+    addTearDown(db.close);
+    expect(await db.completedToday(Riwayah.hafs, now), isEmpty);
+    final known = {
+      ...await db.memorizedBaseline(Riwayah.hafs),
+      ...(await db.progress(Riwayah.hafs)).map((a) => a.ayahId),
+    };
+    final plan = HifzPlanner().plan(
+      riwayah: Riwayah.hafs,
+      memorized: RangeSet(known.map((id) => AyahRange(id, id))),
+      quota: DailyQuota.ayahs(5),
+    );
+    expect(plan.first.ayahs.ids.first, 208); // Al-Baqarah 201.
+    await db.completePortion(Riwayah.hafs, plan.first.ayahs.ids, now);
+    expect(await db.completedToday(Riwayah.hafs, now), [
+      208,
+      209,
+      210,
+      211,
+      212,
+    ]);
+    expect((await db.sessions()).length, 2);
+    await db.saveMemorizedBaseline(Riwayah.hafs, {
+      for (var id = 8; id <= 207; id++) id,
+    });
+    expect(await db.completedToday(Riwayah.hafs, now), [
+      208,
+      209,
+      210,
+      211,
+      212,
+    ]);
+  });
+
   test('review sessions and recall retries survive reopening', () async {
     final directory = await Directory.systemTemp.createTemp('hifz-reviews');
     addTearDown(() => directory.delete(recursive: true));
@@ -32,14 +94,74 @@ void main() {
         adaptive: false,
       ),
     );
+    await db.saveReadingPage(44);
+    await db.setBookmark(44, true);
+    await db.setBookmark(604, true);
+    await db.setBookmark(44, false);
     await db.close();
     db = UserDatabase(NativeDatabase(file));
     addTearDown(db.close);
+    expect(await db.readingPage(), 44);
+    expect(await db.bookmarks(), {604});
     expect((await db.sessions()).length, 1);
     expect((await db.attempts(session.id)).length, 1);
     expect((await db.progress(Riwayah.hafs)).length, 2);
     expect((await db.reviewSettings()).intervals.last.inMinutes, 15);
     expect((await db.reviewSettings()).adaptive, isFalse);
+  });
+
+  test(
+    'previous memorization survives restart without completing today',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('hifz-baseline');
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/user.db');
+      var db = UserDatabase(NativeDatabase(file));
+      await db.markMemorized(Riwayah.hafs, 8, DateTime.utc(2026, 11, 19));
+      await db.saveMemorizedBaseline(Riwayah.hafs, {1, 2, 3, 10, 11});
+      await db.setDailyQuota(1, unit: QuotaUnit.halfPages);
+      await db.close();
+      db = UserDatabase(NativeDatabase(file));
+      addTearDown(db.close);
+      expect(await db.memorizedBaseline(Riwayah.hafs), {1, 2, 3, 10, 11});
+      expect(await db.sessions(), isEmpty);
+      expect((await db.progress(Riwayah.hafs)).single.ayahId, 8);
+      expect(await db.dailyQuotaUnit(), QuotaUnit.halfPages);
+      await db.saveMemorizedBaseline(Riwayah.hafs, {1, 2});
+      expect(await db.memorizedBaseline(Riwayah.hafs), {1, 2});
+      expect((await db.progress(Riwayah.hafs)).single.ayahId, 8);
+    },
+  );
+
+  test('a completed portion advances across local midnight and an unfinished one carries over', () async {
+    final db = UserDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    Future<List<int>> portion(DateTime at) async {
+      final done = await db.completedToday(Riwayah.hafs, at);
+      if (done.isNotEmpty) return done;
+      final known = await db.progress(Riwayah.hafs);
+      return HifzPlanner().plan(riwayah: Riwayah.hafs,
+        memorized: RangeSet(known.map((a) => AyahRange(a.ayahId, a.ayahId))),
+        quota: DailyQuota.ayahs(2)).first.ayahs.ids.toList();
+    }
+    final evening = DateTime(2026, 11, 20, 23, 59, 59);
+    await db.completePortion(Riwayah.hafs, [1, 2], evening);
+    expect(await portion(evening), [1, 2]);
+    expect(await portion(DateTime(2026, 11, 21)), [3, 4]);
+    expect(await portion(DateTime(2026, 11, 22)), [3, 4]);
+  });
+
+  test('first Hifz setup stays complete after restarting', () async {
+    final directory = await Directory.systemTemp.createTemp('hifz-setup');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/user.db');
+    final db = UserDatabase(NativeDatabase(file));
+    expect(await db.needsHifzSetup(), isTrue);
+    await db.finishHifzSetup();
+    await db.close();
+    final reopened = UserDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    expect(await reopened.needsHifzSetup(), isFalse);
   });
 
   test('version 1 progress survives the settings migration', () async {
@@ -59,6 +181,7 @@ void main() {
     old.close();
     final db = UserDatabase(NativeDatabase(file));
     addTearDown(db.close);
+    expect(await db.needsHifzSetup(), isFalse);
     expect((await db.progress(Riwayah.hafs)).single.ayahId, 8);
     expect(await db.dailyQuota(), 5);
     expect(await db.dailyQuotaUnit(), QuotaUnit.ayahs);
@@ -67,12 +190,29 @@ void main() {
     expect(await db.dailyQuotaUnit(), QuotaUnit.lines);
   });
 
+  test('page quotas cover 604 pages in whole ayahs', () {
+    final quran = QuranRepository.open(File('assets/data/quran.db'), riwayah: Riwayah.hafs);
+    addTearDown(quran.close);
+    for (final halves in [1, 2]) {
+      final plan = HifzPlanner().plan(riwayah: Riwayah.hafs, memorized: RangeSet([]),
+        quota: DailyQuota.printedHalfPages(halves, quran.printedPageWeights));
+      expect(plan.length, 1208 ~/ halves);
+      expect(plan.expand((p) => p.ayahs.ids), List.generate(6236, (i) => i + 1));
+      expect(plan.singleWhere((p) => p.ayahs.ids.contains(289)).ayahs.ids, [289]);
+    }
+  });
+
   test('bundled Quran exposes ordered ranges and validates bounds', () {
     final quran = QuranRepository.open(
       File('assets/data/quran.db'),
       riwayah: Riwayah.hafs,
     );
     addTearDown(quran.close);
+    expect(quran.surahs().length, 114);
+    expect(quran.surahs().last.page, 604);
+    expect(quran.pageForJuz(30), 582);
+    expect(quran.pageLines(44).length, 15);
+    expect(quran.pagesForAyahs([1, 7, 8]), [1, 2]);
     expect(quran.linesPerPage, 15);
     expect(quran.lineWeights().length, Riwayah.hafs.totalAyahs);
     expect(quran.lineWeights().values.every((weight) => weight > 0), isTrue);

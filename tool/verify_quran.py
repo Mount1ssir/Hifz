@@ -55,6 +55,13 @@ with tempfile.TemporaryDirectory() as directory:
         ):
             for word in range(first, last + 1):
                 expected_spans.add((ayah_ids[word_ids[word]], page, line))
+actual_words = {row[0]: (row[1], row[2]) for row in db.execute(
+    "SELECT id, ayah_id, glyph FROM mushaf_words")}
+assert len(actual_words) == len(words)
+for word in words.values():
+    assert actual_words[int(word["id"])] == (
+        ayah_ids[(int(word["surah"]), int(word["ayah"]))], word["text"])
+assert db.execute("SELECT count(DISTINCT page) FROM mushaf_lines").fetchone()[0] == 604
 actual_spans = set(db.execute("SELECT ayah_id, page, line FROM ayah_lines"))
 assert actual_spans == expected_spans, "QUL line spans differ from source word ranges"
 assert {i for i, _, _ in actual_spans} == set(range(1, 6237))
@@ -63,3 +70,9 @@ assert all(1 <= line <= 15 for _, _, line in actual_spans)
 print(f"PASS: {len(actual_spans)} exact QUL ayah-line spans across 604 pages.")
 db.close()
 print("PASS: checksums, exact text bytes, 114 surahs, 6236 ayahs, 604 pages, 30 juz, and read-only access.")
+
+font_manifest = json.loads((SOURCES / "quran-fonts.json").read_text())
+assert len(font_manifest["sha256"]) == 604
+for name, expected in font_manifest["sha256"].items():
+    assert hashlib.sha256((ROOT / "assets/quran_fonts" / name).read_bytes()).hexdigest() == expected, name
+print("PASS: all 604 QUL font checksums and original glyph mappings.")

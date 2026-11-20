@@ -1,7 +1,7 @@
 import 'range_set.dart';
 import 'riwayah.dart';
 
-enum QuotaUnit { ayahs, lines, pages }
+enum QuotaUnit { ayahs, lines, pages, halfPages }
 
 abstract interface class MemorizationOrder {
   List<int> arrange(RangeSet remaining);
@@ -43,7 +43,7 @@ class CustomOrder implements MemorizationOrder {
 }
 
 class DailyQuota {
-  DailyQuota._(this.target, this._lineWeights) {
+  DailyQuota._(this.target, this._lineWeights, {this.balancePages = false}) {
     RangeError.checkValueInInterval(target, 1, 0x7fffffff, 'quota');
   }
 
@@ -66,6 +66,12 @@ class DailyQuota {
     );
     return DailyQuota.lines(count * linesPerPage, weights);
   }
+
+  // Every printed page contributes the same weight, including the short opening pages.
+  static const pageScale = 10000;
+  factory DailyQuota.printedHalfPages(int halves, Map<int, int> weights) =>
+      DailyQuota._(halves * (pageScale ~/ 2), weights, balancePages: true);
+  final bool balancePages;
 
   final int target;
   final Map<int, int>? _lineWeights;
@@ -104,6 +110,9 @@ class HifzPlanner {
         'Memorization order must contain each remaining ayah once.',
       );
     }
+    if (quota.balancePages && ordered.isNotEmpty) {
+      return _planPages(ordered, quota);
+    }
     final result = <PlannedPortion>[];
     var current = <AyahRange>[];
     var weight = 0;
@@ -120,5 +129,35 @@ class HifzPlanner {
       result.add(PlannedPortion(RangeSet(current), weight));
     }
     return List.unmodifiable(result);
+  }
+
+  List<PlannedPortion> _planPages(List<int> ids, DailyQuota quota) {
+    final ends = <int>[0];
+    for (final id in ids) {
+      ends.add(ends.last + quota.weight(id));
+    }
+    final sessions = (ends.last / quota.target).round().clamp(1, ids.length);
+    final portions = <PlannedPortion>[];
+    var start = 0;
+    for (var day = 1; day <= sessions; day++) {
+      final ideal = ends.last * day / sessions;
+      final limit = ids.length - (sessions - day);
+      var end = start + 1;
+      while (end < limit &&
+          (ends[end + 1] - ideal).abs() <= (ends[end] - ideal).abs()) {
+        end++;
+      }
+      if (day == sessions) end = ids.length;
+      portions.add(
+        PlannedPortion(
+          RangeSet([
+            for (var i = start; i < end; i++) AyahRange(ids[i], ids[i]),
+          ]),
+          ends[end] - ends[start],
+        ),
+      );
+      start = end;
+    }
+    return List.unmodifiable(portions);
   }
 }

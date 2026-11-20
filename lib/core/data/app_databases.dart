@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../domain/riwayah.dart';
 import 'quran_repository.dart';
 import 'user_database.dart';
+import '../notifications/review_reminders.dart';
 
 class AppDatabases {
   AppDatabases._(this.quran, this.user, this.openTime);
@@ -16,6 +17,7 @@ class AppDatabases {
   final QuranRepository quran;
   final UserDatabase user;
   final Duration openTime;
+  late final ReviewReminders reminders = ReviewReminders(user);
 
   static Future<AppDatabases>? _opening;
 
@@ -57,7 +59,9 @@ class AppDatabases {
     try {
       await user.customSelect('SELECT 1').get();
       timer.stop();
-      return AppDatabases._(quran, user, timer.elapsed);
+      final databases = AppDatabases._(quran, user, timer.elapsed);
+      await databases.reminders.initialize();
+      return databases;
     } catch (_) {
       quran.close();
       await user.close();
@@ -66,6 +70,7 @@ class AppDatabases {
   }
 
   Future<void> close() async {
+    reminders.dispose();
     quran.close();
     await user.close();
     _opening = null;

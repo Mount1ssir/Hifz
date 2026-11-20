@@ -15,10 +15,12 @@ def import_layout(db, sources):
         words = json.loads(archive.read(WORDS))
     ayah_ids = {(s, n): i for i, s, n in db.execute("SELECT id, surah, number FROM ayahs")}
     word_ayahs = {}
+    word_glyphs = {}
     for word in words.values():
         identifier = int(word["id"])
         if identifier in word_ayahs:
             raise ValueError("Duplicate QUL word ID")
+        word_glyphs[identifier] = word["text"]
         word_ayahs[identifier] = ayah_ids[(int(word["surah"]), int(word["ayah"]))]
     with tempfile.TemporaryDirectory() as directory:
         file = Path(directory) / LAYOUT
@@ -28,6 +30,10 @@ def import_layout(db, sources):
             info = layout.execute("SELECT number_of_pages, lines_per_page FROM info").fetchone()
             if info != (604, 15):
                 raise ValueError("Unexpected QUL layout")
+            page_lines = layout.execute(
+                "SELECT page_number, line_number, line_type, is_centered, surah_number FROM pages "
+                "ORDER BY page_number, line_number"
+            ).fetchall()
             lines = layout.execute(
                 "SELECT page_number, line_number, first_word_id, last_word_id "
                 "FROM pages WHERE line_type='ayah' ORDER BY page_number, line_number"
@@ -39,6 +45,20 @@ def import_layout(db, sources):
             line INTEGER NOT NULL,
             PRIMARY KEY(ayah_id, page, line));
     """)
+    db.executescript('''
+        CREATE TABLE mushaf_lines(
+          page INTEGER NOT NULL, line INTEGER NOT NULL, kind TEXT NOT NULL,
+          centered INTEGER NOT NULL, surah INTEGER,
+          PRIMARY KEY(page,line));
+        CREATE TABLE mushaf_words(
+          id INTEGER PRIMARY KEY, ayah_id INTEGER NOT NULL REFERENCES ayahs(id),
+          page INTEGER NOT NULL, line INTEGER NOT NULL, glyph TEXT NOT NULL);
+        CREATE INDEX mushaf_words_page ON mushaf_words(page,line,id);
+'''
+    )
+    db.executemany("INSERT INTO mushaf_lines VALUES (?,?,?,?,?)",
+        [(page, line, kind, centered, int(surah) if surah else None)
+         for page, line, kind, centered, surah in page_lines])
     spans = set()
     seen_words = set()
     seen_lines = set()
@@ -53,6 +73,8 @@ def import_layout(db, sources):
                 raise ValueError("Word assigned to multiple lines")
             seen_words.add(word)
             spans.add((word_ayahs[word], page, line))
+            db.execute("INSERT INTO mushaf_words VALUES (?,?,?,?,?)",
+                (word, word_ayahs[word], page, line, word_glyphs[word]))
     if seen_words != word_ayahs.keys():
         raise ValueError("QUL layout does not cover the complete word dataset")
     if {i for i, _, _ in spans} != set(ayah_ids.values()):
